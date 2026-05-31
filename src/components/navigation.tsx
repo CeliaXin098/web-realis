@@ -11,24 +11,24 @@ const links = [
 
 export function Navigation() {
   return (
-    <header className="sticky top-0 z-30 border-b border-line/70 bg-porcelain/78 backdrop-blur-2xl">
-      <nav className="mx-auto flex min-h-[72px] w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link className="group inline-flex items-center gap-3" href="/">
-          <span className="grid size-10 place-items-center rounded-2xl bg-night text-paper shadow-[0_14px_34px_rgba(24,35,31,0.18)] transition group-hover:-rotate-3">
+    <header className="sticky top-0 z-30 border-b border-line/70 bg-porcelain/86 backdrop-blur-2xl">
+      <nav className="grid min-h-[94px] w-full grid-cols-[1fr_auto_1fr] items-center gap-5 px-5 py-4 sm:px-9 lg:px-14">
+        <Link className="group inline-flex w-fit items-center gap-3 justify-self-start" href="/">
+          <span className="grid size-14 place-items-center rounded-[22px] bg-night text-xl text-paper shadow-[0_14px_34px_rgba(24,35,31,0.18)] transition group-hover:-rotate-3">
             返
           </span>
           <span>
-            <span className="block text-base font-semibold tracking-wide text-ink">Realis</span>
-            <span className="font-sans-soft block text-xs tracking-[0.28em] text-muted">返照</span>
+            <span className="block text-xl font-semibold tracking-wide text-ink">Realis</span>
+            <span className="font-sans-soft block text-base tracking-[0.2em] text-muted">返照</span>
           </span>
         </Link>
 
-        <div className="hidden items-center gap-1 rounded-full border border-line/70 bg-white/48 p-1 shadow-sm md:flex">
+        <div className="hidden items-center gap-1.5 rounded-full border border-line/70 bg-white/58 p-2 shadow-sm md:flex">
           {links.map((link) => {
             const Icon = link.icon;
             return (
               <Link
-                className="font-sans-soft inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-muted transition hover:bg-paper hover:text-ink"
+                className="font-sans-soft inline-flex items-center gap-2.5 rounded-full px-6 py-3 text-lg text-muted transition hover:bg-paper hover:text-ink"
                 href={link.href}
                 key={link.href}
               >
@@ -39,15 +39,15 @@ export function Navigation() {
           })}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 justify-self-end">
           <Link
             aria-label="Change language"
-            className="font-sans-soft hidden text-sm text-muted hover:text-ink sm:inline"
+            className="font-sans-soft hidden text-lg text-muted hover:text-ink sm:inline"
             href="/?lang=en"
           >
             EN
           </Link>
-          <ButtonLink className="min-h-10 px-4" href="/auth" variant="secondary">
+          <ButtonLink className="min-h-12 px-6 text-lg" href="/auth" variant="secondary">
             <Sparkles className="size-4" />
             登录
           </ButtonLink>

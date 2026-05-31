@@ -8,9 +8,7 @@ import {
   Wand2,
 } from "lucide-react";
 import type { ReflectionOutput } from "@/lib/ai/reflection-schema";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, SoftPanel } from "@/components/ui/card";
 
 const labels = {
   film: { label: "电影", icon: Clapperboard },
@@ -38,38 +36,38 @@ export function ReflectionResult({
   );
 
   return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-line/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.72),rgba(238,232,220,0.92))] px-6 py-6">
-        <Badge className="bg-gold/10 text-[#7b6330]">
-          <Sparkles className="mr-1 size-3.5" />
-          沉淀结果 / AI 觉察信
-        </Badge>
-        <h2 className="mt-4 text-4xl font-semibold leading-tight text-ink">{reflection.title}</h2>
-        <p className="mt-4 border-l-2 border-gold/50 pl-5 leading-8 text-muted">{reflection.summary}</p>
-      </div>
+    <article className="overflow-hidden rounded-[26px] border border-[#e0d8ca] bg-[#fffdf8]/80 shadow-[0_18px_55px_rgba(74,63,48,0.08)]">
+      <header className="border-b border-[#e0d8ca] bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(242,235,225,0.88))] px-6 py-7">
+        <p className="font-sans-soft inline-flex items-center gap-2 rounded-full bg-[#efe7d9] px-3 py-1 text-xs text-[#7d6748]">
+          <Sparkles className="size-3.5" />
+          AI 觉察信
+        </p>
+        <h2 className="mt-5 text-4xl font-semibold leading-tight text-ink">{reflection.title}</h2>
+        <p className="mt-5 border-l-2 border-[#b98532]/50 pl-5 text-base leading-8 text-muted">{reflection.summary}</p>
+      </header>
 
-      <div className="space-y-5 p-6">
-        <ResultBlock title="亲爱的你">{reflection.gentle_response}</ResultBlock>
+      <div className="space-y-5 p-5 sm:p-6">
+        <LetterBlock title="亲爱的你">{reflection.gentle_response}</LetterBlock>
         <div className="grid gap-4 md:grid-cols-2">
-          <ResultBlock title="深层原因">{reflection.emotional_root}</ResultBlock>
-          <ResultBlock title="潜在需要">{reflection.underlying_needs.join("、")}</ResultBlock>
+          <LetterBlock title="深层原因">{reflection.emotional_root}</LetterBlock>
+          <LetterBlock title="潜在需要">{reflection.underlying_needs.join("、")}</LetterBlock>
         </div>
-        <ResultBlock title="荣格功能与模式线索">{reflection.pattern}</ResultBlock>
+        <LetterBlock title="荣格功能与模式线索">{reflection.pattern}</LetterBlock>
 
         {jungianInsights.length > 0 ? (
-          <section className="rounded-[28px] border border-line/70 bg-paper/70 p-5">
+          <section className="rounded-[24px] border border-[#e0d8ca] bg-[#f8f2ea]/86 p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h3 className="text-2xl font-semibold text-ink">荣格功能解读</h3>
-                <p className="mt-2 text-sm leading-6 text-muted">
-                  这里不是人格定论，只是从这次对话里提炼出的功能线索。
+                <p className="font-sans-soft mt-2 text-sm leading-6 text-muted">
+                  这不是人格定论，只是从这次对话里提炼出的功能线索。
                 </p>
               </div>
-              <Badge variant="warm">Jungian Functions</Badge>
+              <span className="font-sans-soft rounded-full bg-white/72 px-3 py-1 text-xs text-muted">Jungian Functions</span>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {jungianInsights.map((item) => (
-                <article className="rounded-[22px] border border-line/70 bg-white/62 p-4" key={`${item.person}-${item.code}`}>
+                <article className="rounded-[20px] border border-[#ded6c8] bg-white/64 p-4" key={`${item.person}-${item.code}`}>
                   <div className="flex items-center justify-between gap-4">
                     <span className="font-sans-soft text-lg font-semibold text-ink">{item.code}</span>
                     <span className="font-sans-soft rounded-full bg-sage/10 px-2.5 py-1 text-xs text-moss">
@@ -77,7 +75,7 @@ export function ReflectionResult({
                     </span>
                   </div>
                   <p className="mt-3 text-sm leading-7 text-muted">{item.tendency}</p>
-                  <p className="mt-2 text-xs leading-5 text-muted/80">{item.evidence}</p>
+                  <p className="font-sans-soft mt-2 text-xs leading-5 text-muted/80">{item.evidence}</p>
                 </article>
               ))}
             </div>
@@ -86,7 +84,7 @@ export function ReflectionResult({
 
         <section>
           <h3 className="text-2xl font-semibold text-ink">治愈处方</h3>
-          <p className="mt-2 text-sm leading-6 text-muted">
+          <p className="font-sans-soft mt-2 text-sm leading-6 text-muted">
             不是命令，而是给今天的你一个可以选择的温柔方向。
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -94,7 +92,7 @@ export function ReflectionResult({
               const item = labels[key as keyof typeof labels];
               const Icon = item.icon;
               return (
-                <SoftPanel className="p-4" key={key}>
+                <section className="rounded-[22px] border border-[#ded6c8] bg-[#fbf8f1]/74 p-4" key={key}>
                   <div className="flex items-center gap-3">
                     <span className="grid size-10 place-items-center rounded-2xl bg-moss/10 text-moss">
                       <Icon className="size-5" />
@@ -106,13 +104,13 @@ export function ReflectionResult({
                       <li key={value}>· {value}</li>
                     ))}
                   </ul>
-                </SoftPanel>
+                </section>
               );
             })}
           </div>
         </section>
 
-        <blockquote className="rounded-3xl border border-gold/30 bg-gold/10 p-5 leading-8 text-[#6f5930]">
+        <blockquote className="rounded-[24px] border border-[#e4cf9d] bg-[#f4ead4]/72 p-5 leading-8 text-[#6f5930]">
           “{reflection.future_self_note}”
         </blockquote>
 
@@ -127,28 +125,28 @@ export function ReflectionResult({
             {saved ? (
               <>
                 <CheckCircle2 className="size-4" />
-                已保存到时光画廊
+                已保存到记忆画廊
               </>
             ) : saving ? (
               "正在封存..."
             ) : (
               <>
                 <HeartHandshake className="size-4" />
-                保存到时光画廊
+                保存到记忆画廊
               </>
             )}
           </Button>
         ) : null}
       </div>
-    </Card>
+    </article>
   );
 }
 
-function ResultBlock({ children, title }: { children: React.ReactNode; title: string }) {
+function LetterBlock({ children, title }: { children: React.ReactNode; title: string }) {
   return (
-    <article className="rounded-3xl border border-line/70 bg-white/60 p-5">
-      <h3 className="font-sans-soft text-xs font-semibold uppercase tracking-[0.22em] text-sage">{title}</h3>
+    <section className="rounded-[24px] border border-[#ded6c8] bg-white/62 p-5">
+      <h3 className="font-sans-soft text-sm font-semibold text-moss">{title}</h3>
       <p className="mt-3 leading-8 text-muted">{children}</p>
-    </article>
+    </section>
   );
 }

@@ -5,7 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 
 const updateSchema = z.object({
   id: z.string().min(1),
-  mbti_tendency: z.string().trim().max(120),
+  nickname: z.string().trim().min(1).max(80).optional(),
+  mbti_tendency: z.string().trim().max(120).optional(),
+  position_x: z.number().min(0).max(100).nullable().optional(),
+  position_y: z.number().min(0).max(100).nullable().optional(),
+  relation_label: z.string().trim().max(28).optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -16,8 +20,7 @@ export async function PATCH(request: Request) {
 
   if (isE2EMode()) {
     return NextResponse.json({
-      id: parsed.data.id,
-      mbti_tendency: parsed.data.mbti_tendency,
+      ...parsed.data,
     });
   }
 
@@ -28,12 +31,18 @@ export async function PATCH(request: Request) {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const updates = {
+    ...(parsed.data.nickname !== undefined ? { nickname: parsed.data.nickname } : {}),
+    ...(parsed.data.mbti_tendency !== undefined ? { mbti_tendency: parsed.data.mbti_tendency } : {}),
+    ...(parsed.data.position_x !== undefined ? { position_x: parsed.data.position_x } : {}),
+    ...(parsed.data.position_y !== undefined ? { position_y: parsed.data.position_y } : {}),
+    ...(parsed.data.relation_label !== undefined ? { relation_label: parsed.data.relation_label } : {}),
+    updated_at: new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("person_profiles")
-    .update({
-      mbti_tendency: parsed.data.mbti_tendency,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq("id", parsed.data.id)
     .eq("user_id", user.id)
     .select()

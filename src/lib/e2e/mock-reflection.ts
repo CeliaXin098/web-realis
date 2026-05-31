@@ -24,6 +24,7 @@ export function getMockReflection(): ReflectionOutput {
         relationship_type: "同事",
         nickname: "同事",
         closeness_score: 3,
+        relation_mode_tags: [],
         common_triggers: ["贡献被忽略", "讨论节奏太快"],
         relationship_pattern_summary: "你在工作关系中很在意贡献是否被明确看见。",
         mbti_tendency: "可能呈现偏 Fi 的价值敏感与 Te 的结果压力，仅用于自我理解。",

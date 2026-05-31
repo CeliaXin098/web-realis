@@ -1,8 +1,7 @@
-import { ArrowRight, GalleryVerticalEnd, LockKeyhole } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, LockKeyhole } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { Card, SoftPanel } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { GalleryBoard } from "@/components/gallery-board";
 import type { ReflectionRecord } from "@/lib/records/types";
 import { isE2EMode } from "@/lib/e2e/mock-reflection";
@@ -39,35 +38,7 @@ export default async function GalleryPage() {
 
 function Gallery({ records }: { records: ReflectionRecord[] }) {
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
-      <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
-        <div>
-          <Badge>Time Gallery</Badge>
-          <h1 className="text-balance mt-5 max-w-3xl text-4xl font-semibold leading-tight text-ink sm:text-5xl">
-            记忆画廊
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
-            把完成过的觉察封存成一件件可以回看的作品。它们不是流水账，而是未来某个时刻提醒你：我曾经怎样穿过这里。
-          </p>
-        </div>
-
-        <SoftPanel className="relative overflow-hidden p-6">
-          <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-gold/18 blur-2xl" />
-          <div className="relative flex items-start gap-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-moss text-white shadow-lg shadow-moss/20">
-              <GalleryVerticalEnd className="size-5" />
-            </span>
-            <div>
-              <p className="font-sans-soft text-sm font-medium text-muted">今日馆藏</p>
-              <p className="mt-2 text-3xl font-semibold text-ink">{records.length}</p>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                每条记录都只属于你。未来版本可以继续加入提醒、分享卡片和时间胶囊。
-              </p>
-            </div>
-          </div>
-        </SoftPanel>
-      </section>
-
+    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
       {records.length === 0 ? <EmptyGallery /> : <GalleryBoard records={records} />}
     </main>
   );
@@ -75,15 +46,15 @@ function Gallery({ records }: { records: ReflectionRecord[] }) {
 
 function EmptyGallery() {
   return (
-    <section className="mt-10 overflow-hidden rounded-[34px] border border-dashed border-line bg-white/52 p-8 sm:p-10">
+    <section className="mt-6 overflow-hidden rounded-[34px] border border-dashed border-line bg-white/52 p-8 sm:p-10">
       <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
         <div>
           <span className="grid size-14 place-items-center rounded-2xl bg-sage/12 text-moss">
             <LockKeyhole className="size-6" />
           </span>
-          <h2 className="mt-6 text-3xl font-semibold text-ink">还没有封存的感悟</h2>
+          <h2 className="mt-6 text-3xl font-semibold text-ink">还没有封存的记忆</h2>
           <p className="mt-4 max-w-xl leading-8 text-muted">
-            从一次 AI 觉察开始。写下今天发生的事，保存后这里会生成第一件属于你的“情绪藏品”。
+            从一次 AI 觉察开始。写下今天发生的事，保存后这里会生成第一件属于你的记忆作品。
           </p>
           <ButtonLink className="mt-7" href="/reflect">
             去写第一条记录

@@ -16,6 +16,10 @@ export type CompassUpdate = {
   relationship_type: string;
   nickname: string;
   closeness_score?: number;
+  health_score?: number | null;
+  joy_score?: number | null;
+  tier?: number | null;
+  relation_mode_tags?: string[] | null;
   common_triggers: string[];
   relationship_pattern_summary: string;
   mbti_tendency: string;
@@ -40,4 +44,5 @@ export type ReflectionRecord = {
   compass_updates: CompassUpdate[];
   safety_note: string | null;
   created_at: string;
+  cover_image_url?: string | null;
 };

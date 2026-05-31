@@ -1,14 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-test("home opens and switches between Chinese and English", async ({ page }) => {
+test("home opens and shows primary navigation", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /写下今天发生的事/ })).toBeVisible();
-
-  await page.getByRole("link", { name: "EN" }).click();
-  await expect(page.getByRole("heading", { name: /Write down what happened today/ })).toBeVisible();
-
-  await page.getByRole("link", { name: "中文" }).click();
-  await expect(page.getByRole("heading", { name: /写下今天发生的事/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /写给今天情绪的一间安静房间/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /AI觉察/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /记忆画廊/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /人际罗盘/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Change language" })).toBeVisible();
 });
 
 test("unauthenticated /generate redirects to login", async ({ page }) => {
@@ -38,12 +36,16 @@ test("AI reflection discusses, generates a letter, and can save to gallery", asy
 
 test("memory gallery and relationship compass render in E2E mode", async ({ page }) => {
   await page.goto("/gallery");
-  await expect(page.getByRole("heading", { name: "记忆画廊" })).toBeVisible();
+  await expect(page.getByText("记忆馆藏")).toBeVisible();
 
   await page.goto("/compass");
   await expect(page.getByRole("heading", { name: "人际罗盘" })).toBeVisible();
-  await expect(page.getByText("MBTI 倾向仅用于自我理解")).toBeVisible();
-  await expect(page.getByText("荣格八维")).toBeVisible();
+  await expect(page.getByText("MBTI 与荣格八维只用于自我理解")).toBeVisible();
+  await expect(page.getByText("Tier 3 · 滋养关系 · 健康 3/5 · 愉悦 3/5")).toBeVisible();
+  await expect(page.getByText("关系模式标签")).toBeVisible();
+  await expect(page.getByText("还在观察中")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "荣格八维" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "下一次可以这样相处" })).toBeVisible();
   await page.getByLabel("MBTI 手填").fill("INFJ");
   await page.getByRole("button", { name: "保存 MBTI" }).click();
   await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();

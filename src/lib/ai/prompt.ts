@@ -65,6 +65,10 @@ compass_updates 用于更新人际关系罗盘。每个重要他人必须包含�
 - relationship_type：关系类型，例如父母、朋友、同事、伴侣
 - nickname：用户提到的称呼；如果不明确，用关系类型
 - closeness_score：1-5 的整数，表示当前记录里此人与用户的亲疏/影响强度。1 很远，5 很近或影响很强
+- health_score：1-5 的整数，表示这段关系当前健康度。1 很不健康，5 很健康
+- joy_score：1-5 的整数，表示相处愉悦度。1 很不愉悦，5 很愉悦
+- tier：1-4 的整数，表示关系层级。1 最亲近，4 熟人或弱连接
+- relation_mode_tags：关系模式标签数组，最多 3 个。可选值包括：不主动提问型、无法单独相处型、表演型关系、双重义务型、半伴侣型、历史型关系、非平行人生型、亦敌亦友型、社媒名人型、不平衡型
 - common_triggers：常见触发点
 - relationship_pattern_summary：关系模式摘要
 - mbti_tendency：仅用于自我理解的 MBTI 倾向描述，不能写成诊断或固定人格
@@ -93,6 +97,10 @@ compass_updates 用于更新人际关系罗盘。每个重要他人必须包含�
       "relationship_type": "同事",
       "nickname": "同事",
       "closeness_score": 3,
+      "health_score": 3,
+      "joy_score": 2,
+      "tier": 3,
+      "relation_mode_tags": ["不平衡型"],
       "common_triggers": ["贡献被忽略"],
       "relationship_pattern_summary": "关系模式摘要",
       "mbti_tendency": "可能呈现偏 Fi 的价值敏感，仅用于自我理解",

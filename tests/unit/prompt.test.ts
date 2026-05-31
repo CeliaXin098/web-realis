@@ -23,6 +23,9 @@ describe("AI prompt builders", () => {
     expect(prompt).toContain("同事");
     expect(prompt).toContain("我觉得自己像不存在一样。");
     expect(prompt).toContain("closeness_score");
+    expect(prompt).toContain("health_score");
+    expect(prompt).toContain("joy_score");
+    expect(prompt).toContain("relation_mode_tags");
     expect(prompt).toContain("jungian_functions");
     expect(prompt).toContain("Ni, Ne, Si, Se, Ti, Te, Fi, Fe");
     expect(prompt).toContain("严格 JSON");

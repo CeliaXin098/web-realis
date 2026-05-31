@@ -3,6 +3,7 @@ import { z } from "zod";
 import { reflectionSchema } from "@/lib/ai/reflection-schema";
 import { isE2EMode } from "@/lib/e2e/mock-reflection";
 import { getE2ERecords, saveE2ERecord } from "@/lib/e2e/store";
+import { normalizeCompassProfile } from "@/lib/relationship/compass";
 import { createClient } from "@/lib/supabase/server";
 
 const saveSchema = z.object({
@@ -82,23 +83,64 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   for (const update of reflection.compass_updates) {
-    await supabase.from("person_profiles").upsert(
+    const { data: existingProfile } = await supabase
+      .from("person_profiles")
+      .select("id, related_record_count, common_triggers, position_x, position_y, relation_label")
+      .eq("user_id", user.id)
+      .eq("relationship_type", update.relationship_type)
+      .eq("nickname", update.nickname)
+      .maybeSingle();
+
+    const normalized = normalizeCompassProfile(
       {
-        user_id: user.id,
+        id: existingProfile?.id || `${user.id}-${update.relationship_type}-${update.nickname}`,
         relationship_type: update.relationship_type,
         nickname: update.nickname,
-        related_record_count: 1,
-        common_triggers: update.common_triggers,
+        related_record_count: (existingProfile?.related_record_count || 0) + 1,
+        common_triggers: mergeTextList(existingProfile?.common_triggers, update.common_triggers),
         relationship_pattern_summary: update.relationship_pattern_summary,
         mbti_tendency: update.mbti_tendency,
         jungian_functions: update.jungian_functions,
         closeness_score: update.closeness_score,
+        health_score: update.health_score,
+        joy_score: update.joy_score,
+        tier: update.tier,
+        relation_mode_tags: update.relation_mode_tags,
+        interaction_guide: update.interaction_guide,
+      },
+      `${eventText} ${emotionTags.join(" ")} ${reflection.summary} ${reflection.emotional_root}`,
+    );
+
+    const { error: profileError } = await supabase.from("person_profiles").upsert(
+      {
+        user_id: user.id,
+        relationship_type: update.relationship_type,
+        nickname: update.nickname,
+        related_record_count: normalized.related_record_count,
+        common_triggers: normalized.common_triggers,
+        relationship_pattern_summary: update.relationship_pattern_summary,
+        mbti_tendency: update.mbti_tendency,
+        jungian_functions: update.jungian_functions,
+        closeness_score: update.closeness_score,
+        health_score: normalized.healthScore,
+        joy_score: normalized.joyScore,
+        tier: normalized.tier,
+        relation_mode_tags: normalized.relationModeTags,
+        position_x: existingProfile?.position_x ?? null,
+        position_y: existingProfile?.position_y ?? null,
+        relation_label: existingProfile?.relation_label || "",
         interaction_guide: update.interaction_guide,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,relationship_type,nickname" },
     );
+
+    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
   }
 
   return NextResponse.json(data);
+}
+
+function mergeTextList(existing: string[] | null | undefined, incoming: string[]) {
+  return Array.from(new Set([...(existing || []), ...incoming].map((item) => item.trim()).filter(Boolean))).slice(0, 12);
 }

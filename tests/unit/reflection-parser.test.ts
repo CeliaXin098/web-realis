@@ -21,6 +21,10 @@ describe("parseReflectionContent", () => {
         relationship_type: "同事",
         nickname: "同事",
         closeness_score: 4,
+        health_score: 3,
+        joy_score: 2,
+        tier: 3,
+        relation_mode_tags: ["不平衡型"],
         common_triggers: ["贡献被忽略"],
         relationship_pattern_summary: "在工作关系里很在意被看见。",
         mbti_tendency: "偏 Fi，仅用于自我理解。",
@@ -51,6 +55,10 @@ describe("parseReflectionContent", () => {
     const parsed = parseReflectionContent(JSON.stringify(validReflection));
 
     expect(parsed.compass_updates[0].closeness_score).toBe(4);
+    expect(parsed.compass_updates[0].health_score).toBe(3);
+    expect(parsed.compass_updates[0].joy_score).toBe(2);
+    expect(parsed.compass_updates[0].tier).toBe(3);
+    expect(parsed.compass_updates[0].relation_mode_tags).toEqual(["不平衡型"]);
     expect(parsed.compass_updates[0].jungian_functions[0].code).toBe("Fi");
   });
 

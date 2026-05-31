@@ -23,6 +23,10 @@ export default async function CompassPage() {
         mbti_tendency: update.mbti_tendency,
         jungian_functions: update.jungian_functions,
         closeness_score: update.closeness_score,
+        health_score: update.health_score,
+        joy_score: update.joy_score,
+        tier: update.tier,
+        relation_mode_tags: update.relation_mode_tags,
         interaction_guide: update.interaction_guide,
       })),
     );
@@ -63,23 +67,23 @@ function Compass({
   profiles: RelationshipProfile[];
 }) {
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
-      <section className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+    <main className="mx-auto w-full max-w-[1500px] px-4 py-10 sm:px-6 lg:py-14">
+      <section className="grid gap-8 xl:-mx-14 xl:grid-cols-[0.9fr_1.1fr] xl:items-end 2xl:-mx-24">
         <div>
-          <Badge>Relationship Map</Badge>
+          <Badge>Relationship Compass</Badge>
           <h1 className="text-balance mt-5 max-w-3xl text-4xl font-semibold leading-tight text-ink sm:text-5xl">
             人际罗盘
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
-            这里更像一张个人关系图谱：人物、关系、MBTI、触发事件和沟通建议，会随着每次觉察慢慢沉淀。
+            把重要关系放进象限图里，看见谁滋养你、谁消耗你，以及下一次如何相处。
           </p>
           <p className="font-sans-soft mt-5 inline-flex rounded-full border border-line bg-white/58 px-4 py-2 text-sm text-muted">
-            MBTI 倾向仅用于自我理解，不代表诊断或固定人格。
+            MBTI 与荣格八维只用于自我理解，不用于诊断或固定任何人。
           </p>
         </div>
 
         <SoftPanel className="grid gap-5 p-6 sm:grid-cols-3">
-          <Metric icon={UsersRound} label="重要他人" value={profiles.length.toString()} />
+          <Metric icon={UsersRound} label="关系人数" value={profiles.length.toString()} />
           <Metric
             icon={MessagesSquare}
             label="关联事件"
@@ -87,7 +91,7 @@ function Compass({
           />
           <Metric
             icon={ShieldCheck}
-            label="沟通建议"
+            label="相处建议"
             value={profiles.length > 0 ? "已生成" : "等待中"}
           />
         </SoftPanel>
@@ -140,26 +144,31 @@ function EmptyCompass() {
           <span className="grid size-14 place-items-center rounded-2xl bg-sage/12 text-moss">
             <CompassIcon className="size-6" />
           </span>
-          <h2 className="mt-6 text-3xl font-semibold text-ink">关系图谱还在等待第一条线索</h2>
+          <h2 className="mt-6 text-3xl font-semibold text-ink">还没有关系点位</h2>
           <p className="mt-4 max-w-xl leading-8 text-muted">
-            保存一条带有相关人物的 AI 觉察后，这里会开始生成人物节点、关系连线、MBTI 与沟通建议。
+            保存一条带有相关人物的 AI 觉察后，这里会开始生成关系健康度、相处愉悦度、Tier 和相处建议。
           </p>
           <ButtonLink className="mt-7" href="/reflect">
             去完成一次觉察
             <ArrowRight className="size-4" />
           </ButtonLink>
         </div>
-        <div className="relative min-h-72 rounded-[30px] border border-line/70 bg-[#efe5cf]">
-          <div className="absolute left-1/2 top-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-night text-paper">
-            我
+        <div className="relative min-h-72 overflow-hidden rounded-[30px] border border-line/70 bg-[#fbf7ed]">
+          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 text-xs text-muted">
+            <div className="bg-clay/8 p-5">上头但消耗</div>
+            <div className="bg-sage/16 p-5 text-right">滋养关系</div>
+            <div className="self-end bg-night/5 p-5">需要边界</div>
+            <div className="self-end bg-gold/12 p-5 text-right">稳固但费力</div>
           </div>
-          <div className="absolute left-10 top-10 grid size-20 place-items-center rounded-full border border-line bg-white/70 text-sm text-muted">
+          <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-clay/35" />
+          <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-clay/35" />
+          <div className="absolute left-[68%] top-[26%] grid size-20 place-items-center rounded-full border border-sage/30 bg-white/78 text-sm font-semibold text-moss shadow-lg">
             朋友
           </div>
-          <div className="absolute bottom-10 right-10 grid size-24 place-items-center rounded-full border border-line bg-white/70 text-sm text-muted">
-            伴侣
+          <div className="absolute left-[28%] top-[42%] grid size-14 place-items-center rounded-full border border-clay/30 bg-white/70 text-xs text-clay shadow-md">
+            熟人
           </div>
-          <div className="absolute right-14 top-16 grid size-16 place-items-center rounded-full border border-line bg-white/70 text-sm text-muted">
+          <div className="absolute left-[58%] top-[66%] grid size-16 place-items-center rounded-full border border-gold/35 bg-white/72 text-xs text-[#7b6330] shadow-md">
             同事
           </div>
         </div>
