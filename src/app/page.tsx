@@ -91,7 +91,7 @@ export default function HomePage() {
         </aside>
       </section>
 
-      <section className="relative mx-auto grid w-full max-w-6xl gap-6 px-5 pb-12 sm:px-8 md:grid-cols-3 lg:-mt-24">
+      <section className="relative mx-auto grid w-full max-w-6xl gap-6 px-5 pt-4 pb-12 sm:px-8 md:grid-cols-3 lg:pt-8">
         {notes.map((note, index) => (
           <article className="grid grid-cols-[44px_1fr] gap-4" key={note.title}>
             <span
