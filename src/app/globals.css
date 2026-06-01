@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: light;
+  --app-content-scale: 0.8;
   --porcelain: #f8f5ee;
   --paper: #fffdf7;
   --mist: #edf1eb;
@@ -28,6 +29,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  zoom: var(--app-content-scale);
   background:
     radial-gradient(circle at 8% 8%, rgba(183, 150, 88, 0.16), transparent 30%),
     radial-gradient(circle at 92% 12%, rgba(119, 138, 112, 0.18), transparent 28%),
