@@ -49,10 +49,14 @@ export function ReflectionResult({
       <div className="space-y-5 p-5 sm:p-6">
         <LetterBlock title="亲爱的你">{reflection.gentle_response}</LetterBlock>
         <div className="grid gap-4 md:grid-cols-2">
-          <LetterBlock title="深层原因">{reflection.emotional_root}</LetterBlock>
+          <LetterBlock basis={reflection.reasoning_notes.emotional_root_basis} title="深层原因">
+            {reflection.emotional_root}
+          </LetterBlock>
           <LetterBlock title="潜在需要">{reflection.underlying_needs.join("、")}</LetterBlock>
         </div>
-        <LetterBlock title="荣格功能与模式线索">{reflection.pattern}</LetterBlock>
+        <LetterBlock basis={reflection.reasoning_notes.pattern_basis} title="荣格功能与模式线索">
+          {reflection.pattern}
+        </LetterBlock>
 
         {jungianInsights.length > 0 ? (
           <section className="rounded-[24px] border border-[#e0d8ca] bg-[#f8f2ea]/86 p-5">
@@ -100,8 +104,11 @@ export function ReflectionResult({
                     <p className="font-semibold text-ink">{item.label}</p>
                   </div>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-muted">
-                    {values.map((value) => (
-                      <li key={value}>· {value}</li>
+                    {values.map((value, index) => (
+                      <li key={value}>
+                        · {value}
+                        <BasisNote basis={reflection.reasoning_notes.prescription_reasons[key as keyof typeof labels]?.[index] || ""} label="推荐理由" />
+                      </li>
                     ))}
                   </ul>
                 </section>
@@ -113,6 +120,7 @@ export function ReflectionResult({
         <blockquote className="rounded-[24px] border border-[#e4cf9d] bg-[#f4ead4]/72 p-5 leading-8 text-[#6f5930]">
           “{reflection.future_self_note}”
         </blockquote>
+        <BasisNote basis={reflection.reasoning_notes.future_self_note_basis} fallback="这条旧记录没有保存给未来自己的推断依据。" />
 
         {reflection.safety_note ? (
           <p className="rounded-2xl border border-clay/30 bg-clay/10 p-4 text-sm leading-6 text-[#8a4b39]">
@@ -121,7 +129,13 @@ export function ReflectionResult({
         ) : null}
 
         {onSave ? (
-          <Button className="w-full" disabled={saving || saved} onClick={onSave} type="button">
+          <Button
+            aria-label={saved ? "已保存到时光画廊" : "保存到时光画廊"}
+            className="w-full"
+            disabled={saving || saved}
+            onClick={onSave}
+            type="button"
+          >
             {saved ? (
               <>
                 <CheckCircle2 className="size-4" />
@@ -142,11 +156,28 @@ export function ReflectionResult({
   );
 }
 
-function LetterBlock({ children, title }: { children: React.ReactNode; title: string }) {
+function BasisNote({
+  basis,
+  fallback = "这条旧记录没有保存推断依据。",
+  label = "推断依据",
+}: {
+  basis?: string;
+  fallback?: string;
+  label?: string;
+}) {
+  return (
+    <p className="font-sans-soft mt-3 rounded-2xl bg-[#f1eadf] px-3 py-2 text-xs leading-5 text-muted">
+      {label}：{basis?.trim() || fallback}
+    </p>
+  );
+}
+
+function LetterBlock({ basis, children, title }: { basis?: string; children: React.ReactNode; title: string }) {
   return (
     <section className="rounded-[24px] border border-[#ded6c8] bg-white/62 p-5">
       <h3 className="font-sans-soft text-sm font-semibold text-moss">{title}</h3>
       <p className="mt-3 leading-8 text-muted">{children}</p>
+      {basis !== undefined ? <BasisNote basis={basis} /> : null}
     </section>
   );
 }

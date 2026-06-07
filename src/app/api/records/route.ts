@@ -3,6 +3,7 @@ import { z } from "zod";
 import { reflectionSchema } from "@/lib/ai/reflection-schema";
 import { isE2EMode } from "@/lib/e2e/mock-reflection";
 import { getE2ERecords, saveE2ERecord } from "@/lib/e2e/store";
+import { persistUserMemory } from "@/lib/memory/persistence";
 import { normalizeCompassProfile } from "@/lib/relationship/compass";
 import { createClient } from "@/lib/supabase/server";
 
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       pattern: reflection.pattern,
       prescriptions: reflection.prescriptions,
       future_self_note: reflection.future_self_note,
+      reasoning_notes: reflection.reasoning_notes,
       compass_updates: reflection.compass_updates,
       safety_note: reflection.safety_note,
     })
@@ -81,6 +83,19 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  try {
+    await persistUserMemory(supabase as any, {
+      emotionTags,
+      eventText,
+      reflection,
+      recordId: data.id,
+      relatedPerson,
+      userId: user.id,
+    });
+  } catch (memoryError) {
+    console.error("Failed to persist user memory", memoryError);
+  }
 
   for (const update of reflection.compass_updates) {
     const { data: existingProfile } = await supabase

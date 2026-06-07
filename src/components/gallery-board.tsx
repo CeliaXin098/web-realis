@@ -218,6 +218,8 @@ function VerticalMemoryCard({
 }
 
 function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
+  const reasoningNotes = record.reasoning_notes;
+
   return (
     <aside className="relative mt-10 min-h-[900px] overflow-visible py-2 lg:pr-6">
       <div className="pointer-events-none absolute right-0 top-8 h-56 w-56 rounded-full bg-gold/14 blur-3xl" />
@@ -256,34 +258,81 @@ function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <InfoCard title="深层原因">{record.emotional_root}</InfoCard>
-          <InfoCard title="模式线索">{record.pattern}</InfoCard>
+          <InfoCard basis={reasoningNotes?.emotional_root_basis} title="深层原因">
+            {record.emotional_root}
+          </InfoCard>
+          <InfoCard basis={reasoningNotes?.pattern_basis} title="模式线索">
+            {record.pattern}
+          </InfoCard>
           <InfoCard title="给未来的自己">
             <Sparkles className="mb-3 size-6 text-[#9a7331]" />
             {record.future_self_note}
+            <ReasonNote basis={reasoningNotes?.future_self_note_basis} fallback="这条旧记录没有保存给未来自己的推断依据。" />
           </InfoCard>
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <Prescription icon={<Film className="size-6" />} items={record.prescriptions.film} title="电影" />
-          <Prescription icon={<Music className="size-6" />} items={record.prescriptions.music} title="音乐" />
-          <Prescription icon={<Heart className="size-6" />} items={record.prescriptions.action} title="行动" />
+          <Prescription
+            icon={<Film className="size-6" />}
+            items={record.prescriptions.film}
+            reasons={reasoningNotes?.prescription_reasons.film || []}
+            title="电影"
+          />
+          <Prescription
+            icon={<Music className="size-6" />}
+            items={record.prescriptions.music}
+            reasons={reasoningNotes?.prescription_reasons.music || []}
+            title="音乐"
+          />
+          <Prescription
+            icon={<Heart className="size-6" />}
+            items={record.prescriptions.action}
+            reasons={reasoningNotes?.prescription_reasons.action || []}
+            title="行动"
+          />
         </div>
       </div>
     </aside>
   );
 }
 
-function InfoCard({ children, title }: { children: React.ReactNode; title: string }) {
+function ReasonNote({
+  basis,
+  fallback = "这条旧记录没有保存推断依据。",
+  label = "推断依据",
+}: {
+  basis?: string;
+  fallback?: string;
+  label?: string;
+}) {
+  return (
+    <p className="font-sans-soft mt-4 rounded-2xl bg-[#ece6da] px-4 py-3 text-sm leading-6 text-muted">
+      {label}：{basis?.trim() || fallback}
+    </p>
+  );
+}
+
+function InfoCard({ basis, children, title }: { basis?: string; children: React.ReactNode; title: string }) {
   return (
     <article className="rounded-[28px] border border-[#d8c9b3] bg-[#faf7ef] p-6 text-muted shadow-[0_14px_38px_rgba(84,65,44,0.07)]">
       <h3 className="font-sans-soft text-2xl font-semibold tracking-[0.06em] text-sage">{title}</h3>
       <div className="mt-4 text-lg leading-8">{children}</div>
+      {basis !== undefined ? <ReasonNote basis={basis} /> : null}
     </article>
   );
 }
 
-function Prescription({ icon, items, title }: { icon: React.ReactNode; items: string[]; title: string }) {
+function Prescription({
+  icon,
+  items,
+  reasons,
+  title,
+}: {
+  icon: React.ReactNode;
+  items: string[];
+  reasons: string[];
+  title: string;
+}) {
   return (
     <article className="rounded-[28px] border border-[#d8c9b3] bg-[#faf7ef] p-6 text-muted shadow-[0_14px_38px_rgba(84,65,44,0.07)]">
       <h3 className="flex items-center gap-2 font-sans-soft text-2xl font-semibold tracking-[0.02em] text-ink">
@@ -291,8 +340,11 @@ function Prescription({ icon, items, title }: { icon: React.ReactNode; items: st
         {title}
       </h3>
       <ul className="mt-4 space-y-3 text-lg leading-8">
-        {items.slice(0, 3).map((item) => (
-          <li key={item}>{item}</li>
+        {items.slice(0, 3).map((item, index) => (
+          <li key={item}>
+            {item}
+            <ReasonNote basis={reasons[index]} fallback="这条旧记录没有保存推荐理由。" label="推荐理由" />
+          </li>
         ))}
       </ul>
     </article>

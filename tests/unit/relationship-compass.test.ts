@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   classifyQuadrant,
   getQuadrantCopy,
+  getRelationshipTemperature,
+  getRelationshipWeather,
   inferRelationModeTags,
   mapClosenessToTier,
   normalizeCompassProfile,
@@ -51,6 +53,7 @@ describe("relationship compass logic", () => {
     expect(normalizeRelationType("家人妈妈")).toBe("家人");
     expect(normalizeRelationType("普通熟人")).toBe("熟人");
     expect(normalizeRelationType("网友")).toBe("其他");
+    expect(normalizeRelationType("陌生人")).toBe("其他");
   });
 
   it("infers up to three relationship mode tags from profile and event text", () => {
@@ -146,5 +149,45 @@ describe("relationship compass logic", () => {
     expect(normalized.joyScore).toBe(2);
     expect(normalized.tier).toBe(1);
     expect(normalized.quadrant).toBe("q4");
+  });
+  it("derives relationship temperature and weather from profile scores", () => {
+    const warm = normalizeCompassProfile({
+      id: "warm",
+      relationship_type: "朋友",
+      nickname: "小林",
+      related_record_count: 4,
+      common_triggers: [],
+      relationship_pattern_summary: "彼此支持，也能坦诚表达需要。",
+      mbti_tendency: "",
+      health_score: 5,
+      joy_score: 5,
+      tier: 1,
+      interaction_guide: "继续珍惜这段关系。",
+    });
+    const strained = normalizeCompassProfile({
+      id: "strained",
+      relationship_type: "同事",
+      nickname: "同事",
+      related_record_count: 1,
+      common_triggers: ["被忽略"],
+      relationship_pattern_summary: "最近相处有些紧张和消耗。",
+      mbti_tendency: "",
+      health_score: 2,
+      joy_score: 2,
+      tier: 4,
+      interaction_guide: "先照顾边界。",
+    });
+
+    expect(getRelationshipTemperature(warm)).toBeGreaterThan(getRelationshipTemperature(strained));
+    expect(getRelationshipWeather([warm, strained])).toMatchObject({ profileCount: 2 });
+    expect(getRelationshipWeather([warm, strained]).temperature).toBeGreaterThan(0);
+  });
+
+  it("returns an empty relationship weather state before any profile exists", () => {
+    expect(getRelationshipWeather([])).toMatchObject({
+      temperature: 0,
+      profileCount: 0,
+      label: "暂无天气",
+    });
   });
 });

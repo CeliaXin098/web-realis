@@ -2,11 +2,109 @@ import { expect, test } from "@playwright/test";
 
 test("home opens and shows primary navigation", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /写给今天情绪的一间安静房间/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "给今天的心事，留一间安静发光的房间。" })).toBeVisible();
   await expect(page.getByRole("link", { name: /AI觉察/ }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /记忆画廊/ }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /人际罗盘/ }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Change language" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Change language" }).first()).toBeVisible();
+});
+
+test("home song card does not play mismatched placeholder audio when no source is available", async ({ page }) => {
+  await page.addInitScript(() => {
+    const mediaProto = HTMLMediaElement.prototype as HTMLMediaElement & { __mockPlaying?: boolean };
+
+    mediaProto.play = function () {
+      this.__mockPlaying = true;
+      this.dispatchEvent(new Event("play"));
+      return Promise.resolve();
+    };
+
+    mediaProto.pause = function () {
+      this.__mockPlaying = false;
+      this.dispatchEvent(new Event("pause"));
+    };
+  });
+
+  await page.route("**/api/home/song-deck", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        activeTrackId: "empty-01",
+        cards: [
+          {
+            kind: "player",
+            track: {
+              accent: "#ff8b6b",
+              artist: "静音歌手",
+              audioUrl: "",
+              bars: [40, 60, 80],
+              code: "T - 01",
+              frequency: "44.1 kHz",
+              id: "empty-01",
+              isPlayable: false,
+              mood: "quiet",
+              sourceLabel: "NetEase Music",
+              sourceUrl: "https://music.163.com/",
+              subtitle: "No source in this mocked state.",
+              time: "03:00",
+              title: "暂时无音源",
+            },
+          },
+          {
+            kind: "rust",
+            track: {
+              accent: "#d78c73",
+              artist: "静音歌手",
+              audioUrl: "",
+              bars: [50, 70, 45],
+              code: "T - 02",
+              frequency: "44.1 kHz",
+              id: "empty-02",
+              isPlayable: false,
+              mood: "quiet",
+              sourceLabel: "NetEase Music",
+              sourceUrl: "https://music.163.com/",
+              subtitle: "No source in this mocked state.",
+              time: "03:00",
+              title: "也暂时无音源",
+            },
+          },
+          {
+            kind: "receipt",
+            track: {
+              accent: "#889e9a",
+              artist: "静音歌手",
+              audioUrl: "",
+              bars: [45, 55, 65],
+              code: "T - 03",
+              frequency: "44.1 kHz",
+              id: "empty-03",
+              isPlayable: false,
+              mood: "quiet",
+              sourceLabel: "NetEase Music",
+              sourceUrl: "https://music.163.com/",
+              subtitle: "No source in this mocked state.",
+              time: "03:00",
+              title: "仍暂时无音源",
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto("/");
+
+  const frontCard = page.getByTestId("home-front-card");
+  const audio = page.getByTestId("home-audio");
+
+  await expect
+    .poll(async () => audio.evaluate((node) => node.getAttribute("src")))
+    .toBeNull();
+
+  await frontCard.click();
+  await expect(page.getByTestId("home-audio-status")).toContainText("暂时不能播放");
+  await expect(frontCard).toHaveAttribute("aria-pressed", "false");
 });
 
 test("unauthenticated /generate redirects to login", async ({ page }) => {
@@ -45,8 +143,18 @@ test("memory gallery and relationship compass render in E2E mode", async ({ page
   await expect(page.getByText("关系模式标签")).toBeVisible();
   await expect(page.getByText("还在观察中")).toBeVisible();
   await expect(page.getByRole("heading", { name: "荣格八维" })).toBeVisible();
+  for (const code of ["Ni", "Ne", "Si", "Se", "Ti", "Te", "Fi", "Fe"]) {
+    await expect(page.getByText(code, { exact: true })).toBeVisible();
+  }
   await expect(page.getByRole("heading", { name: "下一次可以这样相处" })).toBeVisible();
   await page.getByLabel("MBTI 手填").fill("INFJ");
-  await page.getByRole("button", { name: "保存 MBTI" }).click();
-  await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
+  await page.getByRole("heading", { name: "荣格八维" }).click();
+  await expect(page.getByText("已自动保存")).toBeVisible();
+  await expect(page.getByRole("button", { name: "保存 MBTI" })).toHaveCount(0);
+  await expect(page.getByText("提倡者 / Counselor")).toHaveCount(0);
+  await expect(page.getByText("可选填写，离开输入框后自动保存。")).toHaveCount(0);
+  await expect(page.getByText("整理关系地图")).toHaveCount(0);
+  await expect(page.getByText("可自由拖动人物，整理属于你的关系地图。")).toHaveCount(0);
+  await expect(page.getByText("关系维度")).toHaveCount(0);
+  await expect(page.getByText("我和 TA 的关系说明")).toHaveCount(0);
 });

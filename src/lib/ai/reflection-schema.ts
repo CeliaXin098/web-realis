@@ -7,6 +7,22 @@ export const healingPrescriptionSchema = z.object({
   action: z.array(z.string()).default([]),
 });
 
+export const reasoningNotesSchema = z
+  .object({
+    emotional_root_basis: z.string().default(""),
+    pattern_basis: z.string().default(""),
+    future_self_note_basis: z.string().default(""),
+    prescription_reasons: z
+      .object({
+        film: z.array(z.string()).default([]),
+        book: z.array(z.string()).default([]),
+        music: z.array(z.string()).default([]),
+        action: z.array(z.string()).default([]),
+      })
+      .default({}),
+  })
+  .default({});
+
 export const jungianFunctionSchema = z.object({
   code: z.enum(["Ni", "Ne", "Si", "Se", "Ti", "Te", "Fi", "Fe"]),
   tendency: z.string(),
@@ -38,6 +54,7 @@ export const reflectionSchema = z.object({
   pattern: z.string(),
   prescriptions: healingPrescriptionSchema,
   future_self_note: z.string(),
+  reasoning_notes: reasoningNotesSchema,
   compass_updates: z.array(compassUpdateSchema).default([]),
   safety_note: z.string().nullable().default(null),
 });

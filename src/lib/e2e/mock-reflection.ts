@@ -19,6 +19,17 @@ export function getMockReflection(): ReflectionOutput {
       action: ["写下事实和感受各三句话"],
     },
     future_self_note: "愿未来的你记得：一次被跳过，不等于你的准备没有价值。",
+    reasoning_notes: {
+      emotional_root_basis: "依据用户提到准备很久的方案被快速跳过，以及对话中出现的委屈感。",
+      pattern_basis: "依据用户把一次会议反馈延伸为自我怀疑的表达。",
+      future_self_note_basis: "依据这次记录里最需要被重新确认的是准备本身的价值。",
+      prescription_reasons: {
+        film: ["用轻一点的故事感帮助情绪从会议场景里退出来。"],
+        book: ["帮助用户练习把羞耻感和自我价值分开。"],
+        music: ["低刺激音乐适合在委屈后慢慢降速。"],
+        action: ["把事实和感受分开写，能减少反复内耗。"],
+      },
+    },
     compass_updates: [
       {
         relationship_type: "同事",

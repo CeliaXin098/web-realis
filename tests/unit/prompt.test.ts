@@ -27,6 +27,9 @@ describe("AI prompt builders", () => {
     expect(prompt).toContain("joy_score");
     expect(prompt).toContain("relation_mode_tags");
     expect(prompt).toContain("jungian_functions");
+    expect(prompt).toContain("reasoning_notes");
+    expect(prompt).toContain("推断依据");
+    expect(prompt).toContain("推荐理由");
     expect(prompt).toContain("Ni, Ne, Si, Se, Ti, Te, Fi, Fe");
     expect(prompt).toContain("严格 JSON");
   });
@@ -37,5 +40,16 @@ describe("AI prompt builders", () => {
     expect(prompt).toContain("AI 觉察陪伴者");
     expect(prompt).toContain("提出一个具体、轻量、能继续深入的问题");
     expect(prompt).toContain("不要输出 JSON");
+  });
+
+  it("injects long-term memory context when available", () => {
+    const prompt = buildReflectionChatPrompt({
+      ...input,
+      memoryContext: "可参考的长期记忆：用户在同事关系里容易担心尴尬。",
+    });
+
+    expect(prompt).toContain("长期记忆");
+    expect(prompt).toContain("用户在同事关系里容易担心尴尬");
+    expect(prompt).toContain("不要机械复述");
   });
 });

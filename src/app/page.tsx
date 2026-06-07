@@ -1,6 +1,7 @@
 import { Compass, GalleryVerticalEnd, LogIn, PenLine } from "lucide-react";
 import Link from "next/link";
 import { HomeSongCard } from "@/components/home-song-card";
+import { getLocaleFromSearchParam, t } from "@/lib/i18n";
 
 const navItems = [
   {
@@ -32,7 +33,14 @@ const notes = [
   { title: "Quiet Archive", body: "每次觉察都会成为未来可以重新观看的一件记忆作品。" },
 ];
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lang?: string }>;
+}) {
+  const params = await searchParams;
+  const locale = getLocaleFromSearchParam(params.lang);
+
   return (
     <main className="relative min-h-[calc(100vh-72px)] overflow-hidden bg-[#f5f1e8] text-[#171715]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_20%,rgba(255,255,255,0.78),transparent_28%),radial-gradient(circle_at_80%_12%,rgba(190,193,181,0.2),transparent_24%),linear-gradient(90deg,rgba(255,255,255,0.48),transparent_34%,rgba(255,255,255,0.36))]" />
@@ -49,19 +57,28 @@ export default function HomePage() {
 
         <aside className="flex flex-col justify-center gap-5 py-8 lg:pl-2">
           <div className="rounded-[30px] border border-[#d8d2c6] bg-[#efede4]/76 p-7 shadow-[0_22px_60px_rgba(34,31,25,0.08)]">
-            <p className="font-sans-soft text-sm uppercase tracking-[0.28em] text-[#9c7b35]">About Realis</p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-sans-soft text-sm uppercase tracking-[0.28em] text-[#9c7b35]">About Realis</p>
+              <Link
+                aria-label="Change language"
+                className="font-sans-soft text-sm uppercase tracking-[0.22em] text-[#8e836f] transition hover:text-[#2a2823]"
+                href={t(locale, "home.langHref")}
+              >
+                {t(locale, "home.langTarget")}
+              </Link>
+            </div>
             <h1 className="mt-5 text-[2.8rem] font-semibold leading-tight tracking-[-0.04em]">
-              写给今天情绪的一间安静房间。
+              {t(locale, "home.title")}
             </h1>
             <p className="font-sans-soft mt-5 text-base leading-8 text-[#5d574d]">
-              Realis / 返照帮助你记录具体事件，与 AI 对话式觉察情绪根源，并把洞察封存为未来能重新观看的记忆画廊。
+              {t(locale, "home.body")}
             </p>
             <Link
               className="font-sans-soft mt-7 inline-flex items-center gap-3 rounded-full bg-[#171715] px-6 py-3.5 text-base font-semibold text-[#f8f5ee] transition hover:-translate-y-0.5 hover:bg-[#2a2823]"
               href="/auth"
             >
               <LogIn className="size-4" />
-              登录进入
+              {t(locale, "home.auth")}
             </Link>
           </div>
 

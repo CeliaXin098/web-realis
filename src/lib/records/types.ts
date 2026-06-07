@@ -5,6 +5,13 @@ export type HealingPrescription = {
   action: string[];
 };
 
+export type ReasoningNotes = {
+  emotional_root_basis: string;
+  pattern_basis: string;
+  future_self_note_basis: string;
+  prescription_reasons: HealingPrescription;
+};
+
 export type JungianFunctionInsight = {
   code: "Ni" | "Ne" | "Si" | "Se" | "Ti" | "Te" | "Fi" | "Fe";
   tendency: string;
@@ -41,6 +48,7 @@ export type ReflectionRecord = {
   pattern: string;
   prescriptions: HealingPrescription;
   future_self_note: string;
+  reasoning_notes?: ReasoningNotes | null;
   compass_updates: CompassUpdate[];
   safety_note: string | null;
   created_at: string;

@@ -34,11 +34,13 @@ type VoiceWindow = Window & {
 
 export function VoiceInputButton({
   className,
+  iconClassName,
   label = "语音输入",
   showText = true,
   onTranscript,
 }: {
   className?: string;
+  iconClassName?: string;
   label?: string;
   showText?: boolean;
   onTranscript: (text: string) => void;
@@ -115,7 +117,7 @@ export function VoiceInputButton({
         onClick={toggleListening}
         type="button"
       >
-        {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+        {isListening ? <MicOff className={cn("size-4", iconClassName)} /> : <Mic className={cn("size-4", iconClassName)} />}
         {showText ? <span>{isListening ? "正在聆听" : "语音"}</span> : null}
       </button>
       {error ? (

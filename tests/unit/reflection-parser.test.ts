@@ -62,6 +62,35 @@ describe("parseReflectionContent", () => {
     expect(parsed.compass_updates[0].jungian_functions[0].code).toBe("Fi");
   });
 
+  it("keeps reasoning notes for insights and recommendations", () => {
+    const parsed = parseReflectionContent(
+      JSON.stringify({
+        ...validReflection,
+        reasoning_notes: {
+          emotional_root_basis: "依据用户说准备很久却被跳过。",
+          pattern_basis: "依据对话里反复出现不被看见。",
+          future_self_note_basis: "依据用户需要被温柔接住。",
+          prescription_reasons: {
+            film: ["适合安放委屈感。"],
+            book: ["帮助理解关系边界。"],
+            music: ["低刺激，适合睡前听。"],
+            action: ["能把感受转成一个小请求。"],
+          },
+        },
+      }),
+    );
+
+    expect(parsed.reasoning_notes.emotional_root_basis).toContain("准备很久");
+    expect(parsed.reasoning_notes.prescription_reasons.music[0]).toContain("低刺激");
+  });
+
+  it("defaults reasoning notes for older records", () => {
+    const parsed = parseReflectionContent(JSON.stringify(validReflection));
+
+    expect(parsed.reasoning_notes.emotional_root_basis).toBe("");
+    expect(parsed.reasoning_notes.prescription_reasons.action).toEqual([]);
+  });
+
   it("throws a stable error for invalid model output", () => {
     expect(() => parseReflectionContent("not json")).toThrow("AI_RESPONSE_INVALID_JSON");
   });

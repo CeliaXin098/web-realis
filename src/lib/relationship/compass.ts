@@ -43,6 +43,13 @@ export type NormalizedCompassProfile = RawCompassProfile & {
   relationModeTags: RelationModeTag[];
 };
 
+export type RelationshipWeatherSummary = {
+  temperature: number;
+  label: string;
+  description: string;
+  profileCount: number;
+};
+
 const RELATION_MODE_TAGS = [
   "不主动提问型",
   "无法单独相处型",
@@ -166,5 +173,68 @@ export function normalizeCompassProfile(profile: RawCompassProfile, eventsText =
     tier,
     quadrant: classifyQuadrant(healthScore, joyScore),
     relationModeTags,
+  };
+}
+
+export function getRelationshipTemperature(
+  profile: Pick<NormalizedCompassProfile, "healthScore" | "joyScore" | "tier" | "related_record_count">,
+) {
+  const score =
+    profile.healthScore * 11 +
+    profile.joyScore * 8 +
+    (5 - profile.tier) * 6 +
+    Math.min(profile.related_record_count, 5) * 2;
+
+  return Math.max(20, Math.min(99, Math.round(score)));
+}
+
+export function getRelationshipWeather(profiles: NormalizedCompassProfile[]): RelationshipWeatherSummary {
+  if (profiles.length === 0) {
+    return {
+      temperature: 0,
+      label: "暂无天气",
+      description: "保存带有相关人物的觉察后生成",
+      profileCount: 0,
+    };
+  }
+
+  const temperature = Math.round(
+    profiles.reduce((total, profile) => total + getRelationshipTemperature(profile), 0) / profiles.length,
+  );
+  const boundaryCount = profiles.filter((profile) => profile.quadrant === "q4").length;
+  const nourishingCount = profiles.filter((profile) => profile.quadrant === "q1").length;
+
+  if (boundaryCount > nourishingCount) {
+    return {
+      temperature,
+      label: "多云，留意边界",
+      description: "近期较多关系让你感到费力，先照顾自己的空间。",
+      profileCount: profiles.length,
+    };
+  }
+
+  if (temperature >= 80) {
+    return {
+      temperature,
+      label: "晴朗而温暖",
+      description: "近期关系里有较多支持、轻松与稳定感。",
+      profileCount: profiles.length,
+    };
+  }
+
+  if (temperature >= 60) {
+    return {
+      temperature,
+      label: "温和有光",
+      description: "关系整体平稳，也有一些值得继续观察的细节。",
+      profileCount: profiles.length,
+    };
+  }
+
+  return {
+    temperature,
+    label: "阴晴交替",
+    description: "有靠近，也有消耗，慢一点确认自己的感受。",
+    profileCount: profiles.length,
   };
 }

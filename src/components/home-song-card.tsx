@@ -15,12 +15,26 @@ const layers = [
 export function HomeSongCard() {
   const [deck, setDeck] = useState<HomeSongDeck>(fallbackDeck);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [fallbackTrackId, setFallbackTrackId] = useState<string | null>(null);
+  const [audioNotice, setAudioNotice] = useState("");
   const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const hasDragged = useRef(false);
   const wheelLock = useRef(false);
+  const playIntentRef = useRef(false);
+  const frontTrack = deck.cards[0]?.track;
+  const renderedTrackIdRef = useRef(frontTrack?.id ?? null);
+  const hasTrackJustChanged = renderedTrackIdRef.current !== (frontTrack?.id ?? null);
+  const useFallbackSource = !hasTrackJustChanged && fallbackTrackId === (frontTrack?.id ?? null);
+  const currentAudioUrl = useMemo(() => {
+    if (!frontTrack) return "";
+    if (useFallbackSource && frontTrack.fallbackAudioUrl) return frontTrack.fallbackAudioUrl;
+    return frontTrack.audioUrl;
+  }, [frontTrack, useFallbackSource]);
+  const fallbackAudioUrl = frontTrack?.fallbackAudioUrl || "";
   const nextLabel = useMemo(() => deck.cards[1]?.track.title || "下一首", [deck.cards]);
 
   useEffect(() => {
@@ -39,6 +53,41 @@ export function HomeSongCard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    renderedTrackIdRef.current = frontTrack?.id ?? null;
+    setFallbackTrackId(null);
+    setAudioNotice("");
+  }, [frontTrack?.id]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.pause();
+    audio.load();
+
+    if (!currentAudioUrl) {
+      playIntentRef.current = false;
+      setIsPlaying(false);
+      return;
+    }
+
+    if (!playIntentRef.current) {
+      setIsPlaying(false);
+      return;
+    }
+
+    audio
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+      })
+      .catch(() => {
+        playIntentRef.current = false;
+        setIsPlaying(false);
+      });
+  }, [currentAudioUrl]);
 
   async function requestDeck(action: HomeSongDeckAction, selectedTrackId?: string) {
     const response = await fetch("/api/home/song-deck", {
@@ -63,8 +112,20 @@ export function HomeSongCard() {
     setDragY(0);
   }
 
+  function handleAudioError() {
+    if (!frontTrack) return;
+
+    if (!useFallbackSource && frontTrack.fallbackAudioUrl && frontTrack.fallbackAudioUrl !== frontTrack.audioUrl) {
+      setFallbackTrackId(frontTrack.id);
+      return;
+    }
+
+    playIntentRef.current = false;
+    setIsPlaying(false);
+    setAudioNotice("这首歌暂时不能播放，但这张卡片还会在这里陪你。");
+  }
+
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
     if (wheelLock.current || Math.abs(event.deltaY) < 12) return;
     wheelLock.current = true;
     bringForward(undefined, event.deltaY > 0 ? "next" : "previous");
@@ -103,21 +164,61 @@ export function HomeSongCard() {
     setDragY(0);
   }
 
-  function handleFrontClick() {
+  async function handleFrontClick() {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
-    setIsPlaying((current) => !current);
+
+    const audio = audioRef.current;
+    if (!audio || !currentAudioUrl) {
+      setAudioNotice("这首歌暂时不能播放，但这张卡片还会在这里陪你。");
+      return;
+    }
+
+    if (isPlaying) {
+      playIntentRef.current = false;
+      audio.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    setAudioNotice("");
+    playIntentRef.current = true;
+
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      playIntentRef.current = false;
+      setIsPlaying(false);
+    }
   }
 
   return (
     <div
       aria-label={`点击播放或暂停，拖开当前卡片后下一张会到前面：${nextLabel}`}
       className="relative z-10 aspect-[0.78] w-full max-w-[495px] touch-pan-y overflow-visible"
+      data-testid="home-song-deck"
       onWheel={handleWheel}
       role="group"
     >
+      <audio
+        aria-hidden="true"
+        className="hidden"
+        data-fallback-src={fallbackAudioUrl}
+        data-testid="home-audio"
+        onEnded={() => {
+          playIntentRef.current = false;
+          setIsPlaying(false);
+        }}
+        onError={handleAudioError}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+        preload="none"
+        ref={audioRef}
+        src={currentAudioUrl || undefined}
+      />
       {deck.cards.map((card, offset) => {
         const layer = layers[offset];
         const isFront = offset === 0;
@@ -127,13 +228,18 @@ export function HomeSongCard() {
 
         return (
           <button
-            aria-hidden={!isFront}
+            aria-label={
+              isFront
+                ? `${isPlaying ? "暂停" : "播放"}卡片：${card.track.title}`
+                : `切换到：${card.track.title}`
+            }
+            aria-pressed={isFront ? isPlaying : undefined}
             className={`absolute inset-0 focus:outline-none focus:ring-4 focus:ring-gold/30 ${
               isDragging && isFront ? "cursor-grabbing transition-none" : "cursor-grab transition duration-500 ease-out"
             }`}
+            data-testid={isFront ? "home-front-card" : undefined}
             key={card.track.code}
-            onClick={isFront ? handleFrontClick : undefined}
-            onDoubleClick={!isFront ? () => bringForward(card.track.id) : undefined}
+            onClick={isFront ? handleFrontClick : () => bringForward(card.track.id, "select")}
             onPointerCancel={isFront ? finishDrag : undefined}
             onPointerDown={isFront ? handlePointerDown : undefined}
             onPointerMove={isFront ? handlePointerMove : undefined}
@@ -142,7 +248,7 @@ export function HomeSongCard() {
               transform: `translate(${x}px, ${y}px) scale(${layer.scale}) rotate(${rotate}deg)`,
               zIndex: 30 - offset,
             }}
-            tabIndex={isFront ? 0 : -1}
+            tabIndex={0}
             type="button"
           >
             {card.kind === "player" ? (
@@ -155,11 +261,27 @@ export function HomeSongCard() {
           </button>
         );
       })}
+      {audioNotice ? (
+        <p
+          className="font-sans-soft absolute -bottom-14 left-0 right-0 mx-auto max-w-[430px] rounded-full border border-[#d8d2c6] bg-[#f4eee2] px-4 py-3 text-center text-sm text-[#5f584c] shadow-[0_10px_30px_rgba(34,31,25,0.08)]"
+          data-testid="home-audio-status"
+          role="status"
+        >
+          {audioNotice}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 function rotateFallbackDeck(deck: HomeSongDeck, selectedTrackId?: string, action: HomeSongDeckAction = "next") {
+  if (deck.cards.length === 0) {
+    return {
+      activeTrackId: "",
+      cards: [],
+    };
+  }
+
   const selectedIndex = selectedTrackId ? deck.cards.findIndex((card) => card.track.id === selectedTrackId) : -1;
 
   if (selectedIndex > 0) {
@@ -294,7 +416,7 @@ function ReceiptCard({
   track: HomeSongCardData["track"];
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-[22px] border border-[#c9c6bc] bg-[#dfe0d8]/90 p-9 text-[#3d3932] shadow-[0_24px_70px_rgba(34,31,25,0.12)]">
+    <div className="relative h-full overflow-hidden rounded-[22px] border border-[#c9c6bc] bg-[#dfe0d8] p-9 text-[#3d3932] shadow-[0_24px_70px_rgba(34,31,25,0.12)]">
       <div className="ml-auto grid size-24 place-items-center rounded-full border border-dashed border-[#9b9689] text-center font-mono text-[10px] uppercase leading-4 tracking-[0.18em]">
         official
         <br />

@@ -3,9 +3,8 @@ export type Locale = "zh" | "en";
 const messages = {
   zh: {
     "nav.reflect": "AI觉察",
-    "home.title": "写下今天发生的事，看见情绪背后的需要。",
-    "home.body":
-      "Realis / 返照用 AI 把具体事件整理成温柔、清晰、可回看的觉察信，并沉淀成你的私密记忆画廊和人际罗盘。",
+    "home.title": "给今天的心事，留一间安静发光的房间。",
+    "home.body": "从一件具体的小事写起，让情绪慢慢显影，也让你重新看见自己。",
     "home.start": "开始觉察",
     "home.auth": "登录 / 注册",
     "home.langTarget": "EN",

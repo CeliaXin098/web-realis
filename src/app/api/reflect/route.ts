@@ -5,6 +5,7 @@ import { buildReflectionChatPrompt, buildReflectionPrompt } from "@/lib/ai/promp
 import { getOpenAIClientOptions } from "@/lib/ai/openai-config";
 import { parseReflectionContent } from "@/lib/ai/reflection-parser";
 import { getMockReflection, isE2EMode } from "@/lib/e2e/mock-reflection";
+import { getUserMemoryContext } from "@/lib/memory/server";
 import { createClient } from "@/lib/supabase/server";
 
 const conversationMessageSchema = z.object({
@@ -75,6 +76,15 @@ export async function POST(request: Request) {
 
   try {
     const openai = new OpenAI(getOpenAIClientOptions(process.env));
+    const memoryContext = await getUserMemoryContext({
+      input: {
+        emotionTags: parsedInput.data.emotionTags,
+        eventText: parsedInput.data.eventText,
+        relatedPerson: parsedInput.data.relatedPerson,
+      },
+      supabase: supabase as any,
+      userId: user.id,
+    });
 
     if (parsedInput.data.mode === "chat") {
       const completion = await openai.chat.completions.create({
@@ -87,7 +97,7 @@ export async function POST(request: Request) {
           },
           {
             role: "user",
-            content: buildReflectionChatPrompt(parsedInput.data),
+            content: buildReflectionChatPrompt({ ...parsedInput.data, memoryContext }),
           },
         ],
         temperature: 0.55,
@@ -111,7 +121,7 @@ export async function POST(request: Request) {
         },
         {
           role: "user",
-          content: buildReflectionPrompt(parsedInput.data),
+          content: buildReflectionPrompt({ ...parsedInput.data, memoryContext }),
         },
       ],
       response_format: { type: "json_object" },

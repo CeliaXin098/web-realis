@@ -13,12 +13,18 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ReflectionResult } from "@/components/reflection-result";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { VoiceInputButton } from "@/components/voice-input-button";
 import type { ReflectionOutput } from "@/lib/ai/reflection-schema";
+import {
+  buildReflectionCalendar,
+  buildReflectionInsight,
+  getRecentReflectionTimeline,
+  type ReflectionSidebarRecord,
+} from "@/lib/reflection/reflect-sidebar";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = {
@@ -29,6 +35,18 @@ type ChatMessage = {
 const emotionOptions = ["平静", "喜悦", "焦虑", "疲惫", "愤怒", "迷茫", "孤独", "委屈"];
 const quickPeople = ["他（同事）", "朋友", "妈妈"];
 const insightTags = ["被理解", "轻松自在", "彼此支持", "共同成长", "其他"];
+const REFLECT_DRAFT_STORAGE_KEY = "realis.reflect.draft.v1";
+
+type ReflectDraft = {
+  chatInput: string;
+  emotionIntensity: number;
+  emotionTags: string[];
+  eventText: string;
+  messages: ChatMessage[];
+  reflection: ReflectionOutput | null;
+  relatedPerson: string;
+  started: boolean;
+};
 
 export default function ReflectPage() {
   const [eventText, setEventText] = useState("");
@@ -44,6 +62,9 @@ export default function ReflectPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [records, setRecords] = useState<ReflectionSidebarRecord[]>([]);
+  const [recordStatus, setRecordStatus] = useState<"loading" | "ready" | "guest">("loading");
+  const draftLoadedRef = useRef(false);
 
   const payload = useMemo(
     () => ({ eventText, emotionTags, emotionIntensity, relatedPerson, conversationMessages: messages }),
@@ -52,6 +73,103 @@ export default function ReflectPage() {
   const today = new Date();
   const assistantMessages = messages.filter((message) => message.role === "assistant");
   const canStart = eventText.trim().length >= 10;
+
+  useEffect(() => {
+    try {
+      const rawDraft = window.localStorage.getItem(REFLECT_DRAFT_STORAGE_KEY);
+      if (rawDraft) {
+        const draft = JSON.parse(rawDraft) as Partial<ReflectDraft>;
+        setEventText(typeof draft.eventText === "string" ? draft.eventText : "");
+        setRelatedPerson(typeof draft.relatedPerson === "string" ? draft.relatedPerson : "");
+        setEmotionIntensity(typeof draft.emotionIntensity === "number" ? draft.emotionIntensity : 5);
+        setEmotionTags(Array.isArray(draft.emotionTags) ? draft.emotionTags.filter((item) => typeof item === "string") : []);
+        setChatInput(typeof draft.chatInput === "string" ? draft.chatInput : "");
+        setMessages(
+          Array.isArray(draft.messages)
+            ? draft.messages.filter((message): message is ChatMessage => {
+                return (
+                  (message?.role === "user" || message?.role === "assistant") &&
+                  typeof message.content === "string" &&
+                  message.content.length > 0
+                );
+              })
+            : [],
+        );
+        setReflection((draft.reflection as ReflectionOutput | null | undefined) ?? null);
+        setStarted(Boolean(draft.started || (Array.isArray(draft.messages) && draft.messages.length > 0)));
+      }
+    } catch {
+      window.localStorage.removeItem(REFLECT_DRAFT_STORAGE_KEY);
+    } finally {
+      draftLoadedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadRecords() {
+      try {
+        const response = await fetch("/api/records", { cache: "no-store" });
+        if (ignore) return;
+
+        if (response.status === 401) {
+          setRecords([]);
+          setRecordStatus("guest");
+          return;
+        }
+
+        if (!response.ok) {
+          setRecords([]);
+          setRecordStatus("ready");
+          return;
+        }
+
+        const data = (await response.json()) as ReflectionSidebarRecord[];
+        setRecords(Array.isArray(data) ? data : []);
+        setRecordStatus("ready");
+      } catch {
+        if (!ignore) {
+          setRecords([]);
+          setRecordStatus("ready");
+        }
+      }
+    }
+
+    loadRecords();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoadedRef.current) return;
+
+    const hasDraft =
+      eventText.trim() ||
+      relatedPerson.trim() ||
+      chatInput.trim() ||
+      emotionTags.length > 0 ||
+      messages.length > 0 ||
+      reflection;
+
+    if (!hasDraft || saved) {
+      window.localStorage.removeItem(REFLECT_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    const draft: ReflectDraft = {
+      chatInput,
+      emotionIntensity,
+      emotionTags,
+      eventText,
+      messages,
+      reflection,
+      relatedPerson,
+      started,
+    };
+    window.localStorage.setItem(REFLECT_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  }, [chatInput, emotionIntensity, emotionTags, eventText, messages, reflection, relatedPerson, saved, started]);
 
   async function startReflection() {
     if (!canStart) return;
@@ -129,6 +247,12 @@ export default function ReflectPage() {
       setError(data.error || "保存失败，请稍后再试。");
       return;
     }
+    const savedRecord = (await response.json()) as ReflectionSidebarRecord;
+    if (savedRecord?.id) {
+      setRecords((current) => [savedRecord, ...current.filter((record) => record.id !== savedRecord.id)]);
+      setRecordStatus("ready");
+    }
+    window.localStorage.removeItem(REFLECT_DRAFT_STORAGE_KEY);
     setSaved(true);
   }
 
@@ -179,7 +303,7 @@ export default function ReflectPage() {
                 id="event"
                 maxLength={500}
                 onChange={(event) => setEventText(event.target.value)}
-                placeholder="他既是同事也是好朋友对象，我们出去吃了一次饭，感觉还行，但我现在很犹豫要不要继续接触发展，我怕怕万一放不了，事情的走向会变得尴尬。"
+                placeholder=""
                 value={eventText}
               />
               <p className="font-sans-soft mt-2 text-right text-xs text-muted">{eventText.length}/500</p>
@@ -263,6 +387,7 @@ export default function ReflectPage() {
             </p>
 
             <Button
+              aria-label="开始觉察"
               className="min-h-14 w-full rounded-[18px] text-base"
               disabled={chatLoading || !canStart}
               onClick={startReflection}
@@ -293,8 +418,11 @@ export default function ReflectPage() {
 
         <InsightSidebar
           assistantCount={assistantMessages.length}
+          assistantMessages={assistantMessages.map((message) => message.content)}
           emotionTags={emotionTags}
           eventText={eventText}
+          records={records}
+          recordStatus={recordStatus}
           relatedPerson={relatedPerson}
           today={today}
         />
@@ -412,7 +540,11 @@ function ConversationPanel({
                 value={chatInput}
               />
               <Paperclip className="hidden size-5 text-muted sm:block" />
-              <VoiceInputButton className="min-h-10 w-10 px-0" showText={false} onTranscript={onVoiceInput} />
+              <VoiceInputButton
+                className="min-h-12 min-w-24 whitespace-nowrap px-4 text-base"
+                iconClassName="size-5"
+                onTranscript={onVoiceInput}
+              />
             </div>
             <Button disabled={chatLoading} onClick={onSend} type="button">
               {chatLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -476,79 +608,69 @@ function ChatBubble({ message, time }: { message: ChatMessage; time: string }) {
 
 function InsightSidebar({
   assistantCount,
+  assistantMessages,
   emotionTags,
   eventText,
+  records,
+  recordStatus,
   relatedPerson,
   today,
 }: {
   assistantCount: number;
+  assistantMessages: string[];
   emotionTags: string[];
   eventText: string;
+  records: ReflectionSidebarRecord[];
+  recordStatus: "loading" | "ready" | "guest";
   relatedPerson: string;
   today: Date;
 }) {
+  const latestRecord = getRecentReflectionTimeline(records, 1)[0] ?? null;
+
   return (
     <aside className="space-y-4">
-      <CalendarCard today={today} />
+      <CalendarCard records={records} today={today} />
       <TodayCard
         assistantCount={assistantCount}
+        assistantMessages={assistantMessages}
         emotionTags={emotionTags}
         eventText={eventText}
+        latestRecord={latestRecord}
         relatedPerson={relatedPerson}
         today={today}
       />
-      <TimelineCard />
+      <TimelineCard records={records} recordStatus={recordStatus} />
     </aside>
   );
 }
 
-function CalendarCard({ today }: { today: Date }) {
-  const days = [
-    ["28", "muted"],
-    ["29", "muted"],
-    ["30", "muted"],
-    ["1", "record"],
-    ["2", "record"],
-    ["3", "record"],
-    ["4", "record"],
-    ["5", "record"],
-    ["6", "record"],
-    ["7", "record"],
-    ["8", "record"],
-    ["9", "record"],
-    ["10", "record"],
-    ["11", "record"],
-    ["12", "record"],
-    ["13", "record"],
-    ["14", "record"],
-    ["15", "record"],
-    ["16", "record"],
-    ["17", "record"],
-    ["18", "record"],
-    ["19", "record"],
-    ["20", "active"],
-    ["21", "record"],
-    ["22", "record"],
-    ["23", "record"],
-    ["24", "record"],
-    ["25", "muted"],
-    ["26", "record"],
-    ["27", "record"],
-    ["28", "record"],
-    ["29", "record"],
-    ["30", "record"],
-    ["31", "record"],
-    ["1", "muted"],
-  ];
+function CalendarCard({ records, today }: { records: ReflectionSidebarRecord[]; today: Date }) {
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const days = buildReflectionCalendar({
+    month: visibleMonth.getMonth(),
+    records,
+    today,
+    year: visibleMonth.getFullYear(),
+  });
+
+  function moveMonth(offset: number) {
+    setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  }
 
   return (
     <section className="rounded-[26px] border border-[#e0d8ca] bg-[#fbf8f1]/82 p-6 shadow-[0_18px_55px_rgba(74,63,48,0.07)]">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-2xl font-semibold text-ink">觉察日历</h2>
         <div className="font-sans-soft flex items-center gap-3 text-base text-muted">
-          {today.getFullYear()}年{today.getMonth() + 1}月
-          <ChevronLeft className="size-4" />
-          <ChevronRight className="size-4" />
+          <button aria-label="上个月" className="rounded-full p-1 transition hover:bg-white" onClick={() => moveMonth(-1)} type="button">
+            <ChevronLeft className="size-4" />
+          </button>
+          <span>
+            {visibleMonth.getFullYear()}年{visibleMonth.getMonth() + 1}月
+          </span>
+          <button aria-label="下个月" className="rounded-full p-1 transition hover:bg-white" onClick={() => moveMonth(1)} type="button">
+            <ChevronRight className="size-4" />
+          </button>
         </div>
       </div>
       <div className="font-sans-soft mt-6 grid grid-cols-7 gap-3 text-center text-sm text-muted">
@@ -557,23 +679,17 @@ function CalendarCard({ today }: { today: Date }) {
         ))}
       </div>
       <div className="mt-4 grid grid-cols-7 gap-2 text-center text-base">
-        {days.map(([day, tone], index) => (
+        {days.map((day) => (
           <div
             className={cn(
               "relative grid aspect-square place-items-center rounded-full text-muted",
-              (tone === "active" || tone === "record") && "bg-[#5e6756] text-paper shadow-[0_12px_30px_rgba(75,87,69,0.24)]",
+              !day.isCurrentMonth && "opacity-35",
+              day.hasRecord && "bg-[#5e6756] text-paper shadow-[0_12px_30px_rgba(75,87,69,0.24)]",
+              day.isToday && !day.hasRecord && "ring-2 ring-sage/40",
             )}
-            key={`${day}-${index}`}
+            key={day.dateKey}
           >
-            {day}
-            {tone !== "muted" && tone !== "active" && tone !== "record" ? (
-              <span
-                className={cn(
-                  "absolute bottom-1.5 size-1 rounded-full",
-                  "bg-sage",
-                )}
-              />
-            ) : null}
+            {day.day}
           </div>
         ))}
       </div>
@@ -596,32 +712,47 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 function TodayCard({
   assistantCount,
+  assistantMessages,
   emotionTags,
   eventText,
+  latestRecord,
   relatedPerson,
   today,
 }: {
   assistantCount: number;
+  assistantMessages: string[];
   emotionTags: string[];
   eventText: string;
+  latestRecord: ReflectionSidebarRecord | null;
   relatedPerson: string;
   today: Date;
 }) {
+  const insight = buildReflectionInsight({
+    assistantMessages,
+    emotionTags,
+    eventText,
+    latestRecord,
+    relatedPerson,
+  });
+
   return (
     <section className="rounded-[26px] border border-[#e0d8ca] bg-[#fbf8f1]/82 p-6 shadow-[0_18px_55px_rgba(74,63,48,0.07)]">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-ink">今天 · {today.getMonth() + 1}月{today.getDate()}日</h2>
-        <button className="font-sans-soft text-sm text-muted" type="button">编辑</button>
+        <h2 className="text-2xl font-semibold text-ink">
+          今天 · {today.getMonth() + 1}月{today.getDate()}日
+        </h2>
       </div>
       <dl className="font-sans-soft mt-6 space-y-4 text-base text-muted">
-        <SummaryRow icon={Sparkles} label="主要情绪" value={emotionTags[0] || "等待选择"} />
-        <SummaryRow icon={CalendarDays} label="核心事件" value={eventText ? eventText.slice(0, 18) : "还没有记录"} />
-        <SummaryRow icon={Home} label="相关人物" value={relatedPerson || "未填写"} />
+        <SummaryRow icon={Sparkles} label="主要情绪" value={emotionTags[0] || latestRecord?.emotion_tags[0] || "等待选择"} />
+        <SummaryRow
+          icon={CalendarDays}
+          label="核心事件"
+          value={assistantCount > 0 ? eventText.slice(0, 18) || latestRecord?.title || "正在整理" : "对话后生成"}
+        />
+        <SummaryRow icon={Home} label="相关人物" value={relatedPerson || latestRecord?.related_person || "未填写"} />
         <SummaryRow icon={Clock3} label="对话轮次" value={`${assistantCount} 轮`} />
       </dl>
-      <div className="mt-6 rounded-[18px] bg-[#eee9df] p-4 text-base leading-8 text-muted">
-        AI洞察：你在关系中重视安心和看重，这反映了你对深层连接的渴望。
-      </div>
+      <div className="mt-6 rounded-[18px] bg-[#eee9df] p-4 text-base leading-8 text-muted">{insight}</div>
     </section>
   );
 }
@@ -636,44 +767,56 @@ function SummaryRow({ icon: Icon, label, value }: { icon: typeof Sparkles; label
   );
 }
 
-function TimelineCard() {
-  const items = [
-    ["5月20日", "与同事吃饭后的纠结", "深度对话 · 23 分钟", "sage"],
-    ["5月18日", "和妈妈的沟通让我很内疚", "情绪记录 · 焦虑", "sage"],
-    ["5月15日", "对未来感到迷茫", "深度对话 · 18 分钟", "purple"],
-    ["5月12日", "和闺蜜聊天后心情好多了", "情绪记录 · 喜悦", "clay"],
-  ];
+function TimelineCard({
+  records,
+  recordStatus,
+}: {
+  records: ReflectionSidebarRecord[];
+  recordStatus: "loading" | "ready" | "guest";
+}) {
+  const items = getRecentReflectionTimeline(records);
+  const emptyText =
+    recordStatus === "guest" ? "登录后，这里会显示你的最近觉察记录。" : "还没有保存过觉察记录，完成一次觉察后这里会亮起来。";
 
   return (
     <section className="rounded-[26px] border border-[#e0d8ca] bg-[#fbf8f1]/82 p-6 shadow-[0_18px_55px_rgba(74,63,48,0.07)]">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold text-ink">觉察时间轴</h2>
-        <button className="font-sans-soft inline-flex items-center gap-1 text-sm text-muted" type="button">
-          查看全部
-          <ChevronRight className="size-3" />
-        </button>
+        <div>
+          <h2 className="text-2xl font-semibold text-ink">觉察时间轴</h2>
+          <p className="font-sans-soft mt-1 text-sm text-muted">最近四条记录</p>
+        </div>
       </div>
       <div className="mt-6 space-y-5">
-        {items.map(([date, title, meta, tone]) => (
-          <article className="grid grid-cols-[1.25rem_1fr] gap-4" key={title}>
-            <div className="relative flex justify-center">
-              <span
-                className={cn(
-                  "mt-1 size-3 rounded-full ring-4 ring-[#fbf8f1]",
-                  tone === "sage" && "bg-sage",
-                  tone === "purple" && "bg-[#9a86b8]",
-                  tone === "clay" && "bg-clay",
-                )}
-              />
-              <span className="absolute top-5 h-12 w-px bg-[#ded6c8]" />
-            </div>
-            <div>
-              <p className="font-sans-soft text-base text-muted">{date}</p>
-              <h3 className="mt-1 text-base font-semibold leading-7 text-ink">{title}</h3>
-              <p className="font-sans-soft mt-1 text-sm text-muted">{meta}</p>
-            </div>
-          </article>
-        ))}
+        {recordStatus === "loading" ? (
+          <p className="font-sans-soft rounded-2xl border border-dashed border-[#ded6c8] bg-white/42 p-5 text-sm leading-7 text-muted">
+            正在读取你的记录...
+          </p>
+        ) : items.length === 0 ? (
+          <p className="font-sans-soft rounded-2xl border border-dashed border-[#ded6c8] bg-white/42 p-5 text-sm leading-7 text-muted">
+            {emptyText}
+          </p>
+        ) : (
+          items.map((item, index) => (
+            <article className="grid grid-cols-[1.25rem_1fr] gap-4" key={item.id}>
+              <div className="relative flex justify-center">
+                <span
+                  className={cn(
+                    "mt-1 size-3 rounded-full ring-4 ring-[#fbf8f1]",
+                    index % 3 === 0 && "bg-sage",
+                    index % 3 === 1 && "bg-[#9a86b8]",
+                    index % 3 === 2 && "bg-clay",
+                  )}
+                />
+                {index < items.length - 1 ? <span className="absolute top-5 h-12 w-px bg-[#ded6c8]" /> : null}
+              </div>
+              <div>
+                <p className="font-sans-soft text-base text-muted">{item.dateLabel}</p>
+                <h3 className="mt-1 text-base font-semibold leading-7 text-ink">{item.title}</h3>
+                <p className="font-sans-soft mt-1 text-sm text-muted">{item.metaLabel}</p>
+              </div>
+            </article>
+          ))
+        )}
       </div>
     </section>
   );

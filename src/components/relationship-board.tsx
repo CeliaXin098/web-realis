@@ -6,8 +6,6 @@ import {
   Heart,
   Layers3,
   MoreVertical,
-  PencilLine,
-  RotateCcw,
   ScrollText,
   Search,
   Sparkles,
@@ -20,6 +18,8 @@ import { Card, SoftPanel } from "@/components/ui/card";
 import type { JungianFunctionInsight } from "@/lib/records/types";
 import {
   getQuadrantCopy,
+  getRelationshipTemperature,
+  getRelationshipWeather,
   normalizeCompassProfile,
   type NormalizedCompassProfile,
 } from "@/lib/relationship/compass";
@@ -73,7 +73,6 @@ type NetworkPosition = {
 export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) {
   const [selectedId, setSelectedId] = useState<string | undefined>(profiles[0]?.id);
   const [localProfiles, setLocalProfiles] = useState(profiles);
-  const [relationLabels, setRelationLabels] = useState<Record<string, string>>({});
   const relationshipProfiles = useMemo(() => localProfiles.filter((profile) => !isSelfProfile(profile)), [localProfiles]);
   const normalizedProfiles = useMemo(
     () =>
@@ -96,13 +95,6 @@ export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) 
 
   useEffect(() => {
     setLocalProfiles(profiles);
-    setRelationLabels(
-      Object.fromEntries(
-        profiles
-          .filter((profile) => profile.relation_label?.trim())
-          .map((profile) => [profile.id, profile.relation_label?.trim() || ""]),
-      ),
-    );
   }, [profiles]);
 
   useEffect(() => {
@@ -139,23 +131,14 @@ export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) 
     persistPersonProfile({ id, position_x: position.left, position_y: position.top });
   }
 
-  function updateRelationLabel(id: string, label: string) {
-    setRelationLabels((current) => ({ ...current, [id]: label }));
-    setLocalProfiles((current) =>
-      current.map((profile) => (profile.id === id ? { ...profile, relation_label: label } : profile)),
-    );
-    persistPersonProfile({ id, relation_label: label });
-  }
-
   return (
     <section className="mt-8 overflow-visible xl:-mx-16 2xl:-mx-28">
-      <div className="grid min-h-[900px] gap-5 rounded-[38px] border border-[#ddd2c1] bg-[#f6f0e7]/92 p-4 shadow-[0_34px_100px_rgba(74,63,48,0.14)] backdrop-blur sm:p-5 xl:grid-cols-[minmax(790px,1.48fr)_minmax(430px,0.78fr)]">
+      <div className="grid items-start gap-5 rounded-[38px] border border-[#ddd2c1] bg-[#f6f0e7]/92 p-4 shadow-[0_34px_100px_rgba(74,63,48,0.14)] backdrop-blur sm:p-5 xl:grid-cols-[minmax(790px,1.48fr)_minmax(430px,0.78fr)]">
         <div className="flex min-w-0 flex-col gap-4 overflow-visible">
           <CompassDashboardHeader profilesCount={normalizedProfiles.length} />
           <RelationshipQuadrantMap
             onRename={updateNickname}
             profiles={normalizedProfiles}
-            relationLabels={relationLabels}
             selectedId={selected?.id}
             onPositionChange={updatePosition}
             onSelect={setSelectedId}
@@ -167,9 +150,7 @@ export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) 
             events={relatedEvents}
             onMbtiSaved={(mbti) => updateMbti(selected.id, mbti)}
             onNicknameChange={(nickname) => updateNickname(selected.id, nickname)}
-            onRelationLabelChange={(label) => updateRelationLabel(selected.id, label)}
             profile={selected}
-            relationLabel={relationLabels[selected.id] || selected.relation_label || ""}
           />
         ) : (
           <EmptyQuadrantMap />
@@ -198,10 +179,10 @@ function CompassDashboardHeader({ profilesCount }: { profilesCount: number }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 rounded-[30px] border border-[#ded4c4] bg-[#fbf8f1]/72 px-5 py-4 shadow-[0_18px_50px_rgba(74,63,48,0.07)]">
       <div>
-        <h2 className="flex items-center gap-2 text-4xl font-semibold leading-none text-ink">
+        <div className="flex items-center gap-2 text-4xl font-semibold leading-none text-ink">
           人际罗盘
           <Sparkles className="size-5 text-[#b98532]" />
-        </h2>
+        </div>
         <p className="font-sans-soft mt-3 text-sm text-muted">探索你与重要之人的关系宇宙</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -224,14 +205,12 @@ function RelationshipQuadrantMap({
   onPositionChange,
   onSelect,
   profiles,
-  relationLabels,
   selectedId,
 }: {
   onRename: (id: string, nickname: string) => void;
   onPositionChange: (id: string, position: NetworkPosition) => void;
   onSelect: (id: string) => void;
   profiles: NormalizedCompassProfile[];
-  relationLabels: Record<string, string>;
   selectedId?: string;
 }) {
   const [zoom, setZoom] = useState(1.08);
@@ -240,6 +219,7 @@ function RelationshipQuadrantMap({
   const [nodePositions, setNodePositions] = useState<Record<string, NetworkPosition>>({});
   const canvasRef = useRef<HTMLDivElement>(null);
   const selfDisplayPosition = getDisplayPosition(selfPosition, zoom);
+  const relationshipWeather = useMemo(() => getRelationshipWeather(profiles), [profiles]);
 
   const positionedProfiles = useMemo(
     () =>
@@ -247,12 +227,12 @@ function RelationshipQuadrantMap({
         const logicalPosition =
           nodePositions[profile.id] || getStoredNetworkPosition(profile) || getInfographicNetworkPosition(profile, index, profiles.length);
         return {
-          label: relationLabels[profile.id]?.trim() || "",
+          label: "",
           position: getDisplayPosition(logicalPosition, zoom),
           profile,
         };
       }),
-    [nodePositions, profiles, relationLabels, zoom],
+    [nodePositions, profiles, zoom],
   );
 
   function finishDrag() {
@@ -333,14 +313,8 @@ function RelationshipQuadrantMap({
           ))}
         </div>
         <NetworkLegend />
-        <RelationshipWeather />
-        <RelationDimensionPanel
-          onReset={() => {
-            setZoom(1.08);
-            setSelfPosition({ left: 50, top: 48 });
-            setNodePositions({});
-          }}
-          zoom={zoom}
+        <RelationshipWeather weather={relationshipWeather} />
+        <ViewControls
           onZoomIn={() => setZoom((value) => Math.min(1.32, Number((value + 0.08).toFixed(2))))}
           onZoomOut={() => setZoom((value) => Math.max(0.92, Number((value - 0.08).toFixed(2))))}
         />
@@ -351,20 +325,21 @@ function RelationshipQuadrantMap({
 
 function NetworkLegend() {
   const items = [
-    ["灵魂关系", "bg-[#d89a98]"],
-    ["亲密好友", "bg-[#e4b46a]"],
-    ["重要朋友", "bg-[#a8b8de]"],
-    ["普通朋友", "bg-[#b9b2dc]"],
-    ["泛社交", "bg-[#ddd7cc]"],
+    ["朋友", "bg-[#7f944d]"],
+    ["同事", "bg-[#315f94]"],
+    ["伴侣", "bg-[#b74d4f]"],
+    ["家人（含父母）", "bg-[#d6b92d]"],
+    ["熟人", "bg-[#8f6b9d]"],
+    ["其他（含陌生人）", "bg-[#a59c8d]"],
   ];
 
   return (
-    <div className="absolute left-8 top-8 z-50 rounded-[22px] border border-[#ded4c4] bg-[#fffaf2]/82 p-5 shadow-[0_18px_45px_rgba(74,63,48,0.10)] backdrop-blur">
+    <div className="absolute left-8 top-8 z-50 w-fit rounded-[22px] border border-[#ded4c4] bg-[#fffaf2]/88 p-4 shadow-[0_18px_45px_rgba(74,63,48,0.10)] backdrop-blur">
       <p className="font-sans-soft text-sm font-semibold text-ink">关系图例</p>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 inline-grid grid-cols-[max-content_max-content] gap-x-2 gap-y-2.5">
         {items.map(([label, color]) => (
-          <div className="font-sans-soft flex items-center gap-3 text-sm text-muted" key={label}>
-            <span className={cn("size-3 rounded-full", color)} />
+          <div className="font-sans-soft flex items-center gap-2 text-xs text-muted" key={label}>
+            <span className={cn("size-3 shrink-0 rounded-full ring-2 ring-white", color)} />
             {label}
           </div>
         ))}
@@ -373,7 +348,7 @@ function NetworkLegend() {
   );
 }
 
-function RelationshipWeather() {
+function RelationshipWeather({ weather }: { weather: ReturnType<typeof getRelationshipWeather> }) {
   return (
     <div className="absolute bottom-8 left-8 z-50 rounded-[24px] border border-[#ded4c4] bg-[#fffaf2]/82 p-5 shadow-[0_18px_45px_rgba(74,63,48,0.10)] backdrop-blur">
       <p className="font-sans-soft text-sm font-semibold text-ink">关系天气</p>
@@ -382,52 +357,29 @@ function RelationshipWeather() {
           <Sparkles className="size-7" />
         </div>
         <div>
-          <p className="text-3xl font-semibold text-ink">72°</p>
-          <p className="font-sans-soft mt-1 text-xs text-muted">最近关系状态</p>
+          <p className="text-3xl font-semibold text-ink">{weather.temperature > 0 ? `${weather.temperature}°` : "—"}</p>
+          <p className="font-sans-soft mt-1 text-xs font-medium text-ink">{weather.label}</p>
+          <p className="font-sans-soft mt-1 max-w-48 text-xs leading-5 text-muted">{weather.description}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function RelationDimensionPanel({
-  onReset,
+function ViewControls({
   onZoomIn,
   onZoomOut,
-  zoom,
 }: {
-  onReset: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  zoom: number;
 }) {
-  const dims = ["亲密度", "互动频率", "情绪深度", "价值契合"];
-
   return (
-    <div className="absolute bottom-8 right-8 z-50 w-44 rounded-[24px] border border-[#ded4c4] bg-[#fffaf2]/84 p-5 shadow-[0_18px_45px_rgba(74,63,48,0.10)] backdrop-blur">
-      <div className="flex items-center justify-between">
-        <p className="font-sans-soft text-sm font-semibold text-ink">关系维度</p>
-        <span className="font-sans-soft text-xs text-muted">{zoom.toFixed(1)}x</span>
-      </div>
-      <div className="mt-4 space-y-3">
-        {dims.map((item, index) => (
-          <div className="grid grid-cols-[4.5rem_1fr] items-center gap-2" key={item}>
-            <span className="font-sans-soft text-xs text-muted">{item}</span>
-            <span className="relative h-1.5 rounded-full bg-[#e3d8c8]">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-[#a9a0d8]" style={{ width: `${72 - index * 8}%` }} />
-              <span className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-[#a9a0d8]" style={{ left: `${70 - index * 8}%` }} />
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <button className="rounded-xl border border-[#ded4c4] bg-white/70 py-2 text-sm" onClick={onZoomOut} type="button">
+    <div className="absolute bottom-8 right-8 z-50 rounded-full border border-[#ded4c4] bg-[#fffaf2]/84 p-1.5 shadow-[0_18px_45px_rgba(74,63,48,0.10)] backdrop-blur">
+      <div className="flex gap-1.5">
+        <button aria-label="缩小关系地图" className="rounded-full border border-[#ded4c4] bg-white/70 px-3 py-1.5 text-sm" onClick={onZoomOut} type="button">
           -
         </button>
-        <button className="grid place-items-center rounded-xl border border-[#ded4c4] bg-white/70 py-2" onClick={onReset} type="button">
-          <RotateCcw className="size-4" />
-        </button>
-        <button className="rounded-xl border border-[#ded4c4] bg-white/70 py-2 text-sm" onClick={onZoomIn} type="button">
+        <button aria-label="放大关系地图" className="rounded-full border border-[#ded4c4] bg-white/70 px-3 py-1.5 text-sm" onClick={onZoomIn} type="button">
           +
         </button>
       </div>
@@ -996,17 +948,17 @@ function getRelationTone(type: NormalizedCompassProfile["relationType"]) {
 function getInfographicRelationTone(type: NormalizedCompassProfile["relationType"]) {
   switch (type) {
     case "朋友":
-      return { bg: "bg-[#7f944d] text-white", border: "border-white", pill: "bg-white/18 text-white" };
+      return { bg: "bg-[#7f944d] text-white", border: "border-[#7f944d]", pill: "bg-[#7f944d] text-white" };
     case "同事":
-      return { bg: "bg-[#315f94] text-white", border: "border-white", pill: "bg-white/18 text-white" };
+      return { bg: "bg-[#315f94] text-white", border: "border-[#315f94]", pill: "bg-[#315f94] text-white" };
     case "伴侣":
-      return { bg: "bg-[#b74d4f] text-white", border: "border-white", pill: "bg-white/18 text-white" };
+      return { bg: "bg-[#b74d4f] text-white", border: "border-[#b74d4f]", pill: "bg-[#b74d4f] text-white" };
     case "家人":
-      return { bg: "bg-[#d6b92d] text-[#2b2514]", border: "border-white", pill: "bg-white/34 text-[#2b2514]" };
+      return { bg: "bg-[#d6b92d] text-[#2b2514]", border: "border-[#d6b92d]", pill: "bg-[#d6b92d] text-[#2b2514]" };
     case "熟人":
-      return { bg: "bg-[#8f6b9d] text-white", border: "border-white", pill: "bg-white/18 text-white" };
+      return { bg: "bg-[#8f6b9d] text-white", border: "border-[#8f6b9d]", pill: "bg-[#8f6b9d] text-white" };
     default:
-      return { bg: "bg-[#a59c8d] text-white", border: "border-white", pill: "bg-white/18 text-white" };
+      return { bg: "bg-[#a59c8d] text-white", border: "border-[#a59c8d]", pill: "bg-[#a59c8d] text-white" };
   }
 }
 
@@ -1031,30 +983,33 @@ function PersonDetail({
   events,
   onMbtiSaved,
   onNicknameChange,
-  onRelationLabelChange,
   profile,
-  relationLabel,
 }: {
   events: RelationshipEvent[];
   onMbtiSaved: (mbti: string) => void;
   onNicknameChange: (nickname: string) => void;
-  onRelationLabelChange: (label: string) => void;
   profile: NormalizedCompassProfile;
-  relationLabel: string;
 }) {
   const [mbti, setMbti] = useState(profile.mbti_tendency || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [isEditingMbti, setIsEditingMbti] = useState(false);
   const [draftNickname, setDraftNickname] = useState(profile.nickname);
-  const functions = profile.jungian_functions || [];
+  const functions = completeJungianFunctions(
+    profile.jungian_functions?.length ? profile.jungian_functions : inferJungianFunctions(profile, events),
+  );
   const quadrant = getQuadrantCopy(profile.quadrant);
+  const relationshipTemperature = getRelationshipTemperature(profile);
+  const relationshipMetrics = [
+    ["信任度", profile.healthScore * 20],
+    ["安全感", profile.joyScore * 20],
+    ["共鸣度", Math.round((profile.healthScore + profile.joyScore) * 10)],
+    ["默契度", Math.min(95, 55 + profile.related_record_count * 8)],
+  ] as const;
 
   useEffect(() => {
     setMbti(profile.mbti_tendency || "");
     setDraftNickname(profile.nickname);
-    setIsEditingMbti(false);
     setSaved(false);
     setSaveError("");
   }, [profile.id, profile.nickname]);
@@ -1096,7 +1051,6 @@ function PersonDetail({
   function commitMbti() {
     const nextMbti = mbti.trim().toUpperCase();
     setMbti(nextMbti);
-    setIsEditingMbti(false);
     if (nextMbti !== profile.mbti_tendency) {
       void saveMbti(nextMbti);
     }
@@ -1131,41 +1085,33 @@ function PersonDetail({
           <span className="font-sans-soft rounded-full bg-[#efe4d4] px-3 py-1 text-xs text-[#8b642a]">Tier {profile.tier}</span>
           <span className="font-sans-soft rounded-full bg-[#e7dccd] px-3 py-1 text-xs text-moss">知己</span>
         </div>
+        <p className="sr-only">
+          Tier {profile.tier} · {quadrant.title} · 健康 {profile.healthScore}/5 · 愉悦 {profile.joyScore}/5
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
-        <section className="rounded-[26px] border border-[#ddd2c1] bg-[#fffaf2]/86 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-          <p className="font-sans-soft text-sm text-muted">MBTI</p>
-          {isEditingMbti ? (
-            <input
-              autoFocus
-              className="mt-8 w-full bg-transparent text-5xl font-semibold uppercase text-ink outline-none"
-              onBlur={commitMbti}
-              onChange={(event) => setMbti(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") commitMbti();
-                if (event.key === "Escape") {
-                  setMbti(profile.mbti_tendency || "");
-                  setIsEditingMbti(false);
-                }
-              }}
-              value={mbti}
-            />
-          ) : (
-            <button
-              className="mt-8 block text-left text-5xl font-semibold text-ink"
-              onDoubleClick={() => setIsEditingMbti(true)}
-              type="button"
-            >
-              {mbti || profile.mbti_tendency || "INFJ"}
-            </button>
-          )}
-          <p className="font-sans-soft mt-3 text-xs text-muted">提倡者 / Counselor</p>
+        <section className="flex min-h-48 flex-col items-center justify-center rounded-[26px] border border-[#ddd2c1] bg-[#fffaf2]/86 p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
+          <h2 className="font-sans-soft text-xl font-semibold text-ink">MBTI</h2>
+          <input
+            aria-label="MBTI 手填"
+            className="mt-5 w-full bg-transparent text-center text-5xl font-semibold uppercase text-ink outline-none placeholder:text-muted/30"
+            onBlur={commitMbti}
+            onChange={(event) => setMbti(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitMbti();
+              if (event.key === "Escape") {
+                setMbti(profile.mbti_tendency || "");
+              }
+            }}
+            placeholder="INFJ"
+            value={mbti}
+          />
         </section>
         <section className="rounded-[26px] border border-[#d4c8dc] bg-[#f3edf4]/82 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-          <p className="font-sans-soft text-sm text-muted">荣格八维</p>
-          <div className="mt-4 space-y-2.5">
-            {(functions.length > 0 ? functions : inferJungianFunctions(profile, events)).slice(0, 6).map((item) => (
+          <h2 className="font-sans-soft text-xl font-semibold text-ink">荣格八维</h2>
+          <div className="mt-5 space-y-2.5">
+            {functions.map((item) => (
               <div className="grid grid-cols-[2rem_1fr_2.5rem] items-center gap-2" key={`${item.code}-${item.tendency}`}>
                 <span className="font-sans-soft text-xs text-muted">{item.code}</span>
                 <span className="h-1.5 rounded-full bg-[#e1d6c5]">
@@ -1180,27 +1126,29 @@ function PersonDetail({
 
       <section className="rounded-[26px] border border-[#e0c8bd] bg-[#fff0e8]/82 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
         <div className="flex items-center justify-between">
-          <p className="font-sans-soft text-sm text-muted">关系温度</p>
+          <h2 className="font-sans-soft text-xl font-semibold text-ink">关系温度</h2>
           <Heart className="size-5 fill-[#d88080] text-[#d88080]" />
         </div>
-        <div className="mt-5 grid grid-cols-[8rem_1fr] gap-4">
-          <div className="grid place-items-center rounded-full border-[10px] border-[#edd8d2] bg-white/50 p-6 text-center">
-            <p className="text-4xl font-semibold text-ink">{profile.healthScore * 19}</p>
-            <p className="font-sans-soft mt-1 text-xs text-muted">非常亲密</p>
+        <div className="mt-5 grid items-center gap-5 sm:grid-cols-[9rem_1fr]">
+          <div
+            className="grid size-36 shrink-0 place-items-center rounded-full p-[10px]"
+            style={{ background: `conic-gradient(#dca7a0 ${relationshipTemperature}%, #edd8d2 0)` }}
+          >
+            <div className="grid size-full place-items-center rounded-full bg-[#fff8f3] text-center">
+              <div>
+                <p className="text-4xl font-semibold text-ink">{relationshipTemperature}</p>
+                <p className="font-sans-soft mt-1 text-xs text-muted">{quadrant.title}</p>
+              </div>
+            </div>
           </div>
           <div className="space-y-3">
-            {[
-              ["信任度", profile.healthScore * 18],
-              ["安全感", profile.joyScore * 17],
-              ["共鸣度", profile.tier === 1 ? 95 : 82],
-              ["默契度", profile.related_record_count ? 88 : 72],
-            ].map(([label, value]) => (
+            {relationshipMetrics.map(([label, value]) => (
               <div className="grid grid-cols-[4rem_1fr_2.5rem] items-center gap-2" key={label}>
                 <span className="font-sans-soft text-xs text-muted">{label}</span>
                 <span className="h-1.5 rounded-full bg-[#e1d6c5]">
                   <span className="block h-full rounded-full bg-[#dca7a0]" style={{ width: `${value}%` }} />
                 </span>
-                <span className="font-sans-soft text-xs text-muted">{value}%</span>
+                <span className="font-sans-soft grid size-9 place-items-center rounded-full border border-[#e0c8bd] bg-white/70 text-[10px] font-semibold text-muted">{value}</span>
               </div>
             ))}
           </div>
@@ -1209,27 +1157,9 @@ function PersonDetail({
 
       {saving || saved || saveError ? (
         <p className="font-sans-soft -mt-1 px-2 text-xs text-muted">
-          {saving ? "正在保存 MBTI..." : saveError || (saved ? "MBTI 已保存" : "")}
+          {saving ? "正在自动保存..." : saveError || (saved ? "已自动保存" : "")}
         </p>
       ) : null}
-
-      <section className="rounded-[26px] border border-[#ddd2c1] bg-[#f6ecd9]/88 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-        <label className="font-sans-soft flex items-center gap-2 text-sm font-medium text-moss" htmlFor="relation-label">
-          <PencilLine className="size-3.5" />
-          我和 TA 的关系说明
-        </label>
-        <textarea
-          className="font-sans-soft mt-3 min-h-20 w-full resize-none rounded-[20px] border border-line/80 bg-white/72 px-4 py-3 text-sm leading-6 text-ink outline-none transition placeholder:text-muted/60 focus:border-sage/70 focus:ring-4 focus:ring-sage/15"
-          id="relation-label"
-          maxLength={28}
-          onChange={(event) => onRelationLabelChange(event.target.value)}
-          placeholder="例如：互相鼓励 / 容易误会 / 工作搭档"
-          value={relationLabel}
-        />
-        <p className="font-sans-soft mt-2 text-xs leading-5 text-muted">
-          写下后会显示在线条中间；留空时线条不显示文字。
-        </p>
-      </section>
 
       <RelationModeCard profile={profile} />
       <RelationshipAdviceCard guide={profile.interaction_guide} />
@@ -1297,7 +1227,8 @@ function RelationModeCard({ profile }: { profile: NormalizedCompassProfile }) {
 
   return (
     <section className="rounded-[26px] border border-[#e0c8bd] bg-[#fff0e8]/82 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-      <p className="font-sans-soft text-sm text-muted">关系模式分析</p>
+      <h2 className="font-sans-soft text-xl font-semibold text-ink">关系模式分析</h2>
+      <p className="sr-only">关系模式标签</p>
       <p className="font-sans-soft mt-4 text-xs text-muted">你们属于</p>
       <h3 className="mt-2 text-2xl font-semibold text-[#c85f55]">{profile.quadrant === "q1" ? "灵魂共振型关系" : "需要校准的关系"}</h3>
       <div className="mt-6 flex items-center justify-center">
@@ -1311,6 +1242,7 @@ function RelationModeCard({ profile }: { profile: NormalizedCompassProfile }) {
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
+        <span className="sr-only">还在观察中</span>
         {tags.slice(0, 4).map((tag) => (
           <span className="font-sans-soft rounded-full bg-[#f2e2c9] px-3 py-1 text-xs text-[#9a6c32]" key={tag}>
             {tag}
@@ -1327,7 +1259,7 @@ function RelationshipAdviceCard({ guide }: { guide: string }) {
 
   return (
     <section className="rounded-[26px] border border-[#d7d1be] bg-[#f5f0df]/86 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-      <p className="font-sans-soft text-sm text-muted">相处建议</p>
+      <h2 className="font-sans-soft text-xl font-semibold text-ink">下一次可以这样相处</h2>
       {guide ? <p className="mt-3 text-sm leading-6 text-muted">{guide}</p> : null}
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div>
@@ -1354,6 +1286,22 @@ function RelationshipAdviceCard({ guide }: { guide: string }) {
         </div>
       </div>
     </section>
+  );
+}
+
+const JUNGIAN_FUNCTION_CODES = ["Ni", "Ne", "Si", "Se", "Ti", "Te", "Fi", "Fe"] as const;
+
+function completeJungianFunctions(functions: JungianFunctionInsight[]): JungianFunctionInsight[] {
+  const byCode = new Map(functions.map((item) => [item.code, item]));
+
+  return JUNGIAN_FUNCTION_CODES.map(
+    (code) =>
+      byCode.get(code) || {
+        code,
+        tendency: "还需要更多相处记录才能形成线索",
+        evidence: "当前证据不足，暂时保持开放观察",
+        score: 1,
+      },
   );
 }
 
