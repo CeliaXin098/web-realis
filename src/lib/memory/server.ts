@@ -14,7 +14,7 @@ export async function getUserMemoryContext({
 }) {
   const profileResponse = await supabase
     .from("user_memory_profiles")
-    .select("core_needs, recurring_patterns, common_triggers, support_style, caution_notes")
+    .select("core_needs, recurring_patterns, common_triggers, support_style, caution_notes, mbti_type, mbti_source, jungian_functions")
     .eq("user_id", userId)
     .maybeSingle();
 

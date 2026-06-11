@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildReflectionCalendar,
   buildReflectionInsight,
+  getRecentTimelineLabel,
   getRecentReflectionTimeline,
   type ReflectionSidebarRecord,
 } from "@/lib/reflection/reflect-sidebar";
@@ -10,6 +11,7 @@ function record(id: string, createdAt: string, overrides: Partial<ReflectionSide
   return {
     id,
     created_at: createdAt,
+    emotion_intensity: 7,
     emotion_tags: ["委屈"],
     event_text: `第 ${id} 条具体事件记录`,
     related_person: "同事",
@@ -45,6 +47,13 @@ describe("reflect sidebar helpers", () => {
 
     expect(timeline.map((item) => item.id)).toEqual(["new", "4", "3", "2"]);
     expect(timeline[0].dateLabel).toBe("6月5日");
+    expect(timeline[0].metaLabel).toBe("委屈 · 强度等级 7/10");
+  });
+
+  it("describes the actual recent record count instead of implying four records exist", () => {
+    expect(getRecentTimelineLabel(0)).toBe("还没有记录");
+    expect(getRecentTimelineLabel(1)).toBe("最近 1 条记录");
+    expect(getRecentTimelineLabel(8)).toBe("最近 4 条记录");
   });
 
   it("builds insight from the current conversation instead of returning fixed copy", () => {

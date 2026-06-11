@@ -15,8 +15,10 @@ export function saveE2ERecord(input: {
   emotionTags: string[];
   emotionIntensity: number;
   relatedPerson?: string;
+  conversationMessages?: ReflectionRecord["conversation_messages"];
+  reflection?: ReturnType<typeof getMockReflection>;
 }) {
-  const reflection = getMockReflection();
+  const reflection = input.reflection || getMockReflection();
   const record: ReflectionRecord = {
     id: `e2e-${Date.now()}`,
     event_text: input.eventText,
@@ -26,11 +28,13 @@ export function saveE2ERecord(input: {
     title: reflection.title,
     summary: reflection.summary,
     gentle_response: reflection.gentle_response,
+    conversation_messages: input.conversationMessages || [],
     emotional_root: reflection.emotional_root,
     underlying_needs: reflection.underlying_needs,
     pattern: reflection.pattern,
     prescriptions: reflection.prescriptions,
     future_self_note: reflection.future_self_note,
+    reasoning_notes: reflection.reasoning_notes,
     compass_updates: reflection.compass_updates,
     safety_note: reflection.safety_note,
     created_at: new Date().toISOString(),

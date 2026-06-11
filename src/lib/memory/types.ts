@@ -15,6 +15,9 @@ export type UserMemoryProfile = {
   caution_notes: string[];
   common_triggers: string[];
   core_needs: string[];
+  jungian_functions?: import("@/lib/records/types").JungianFunctionInsight[];
+  mbti_source?: import("@/lib/relationship/self-profile").MbtiSource;
+  mbti_type?: string;
   recurring_patterns: string[];
   support_style: string;
 };

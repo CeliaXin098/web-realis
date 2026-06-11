@@ -4,6 +4,12 @@ import {
   getRelationshipTemperature,
   normalizeCompassProfile,
 } from "@/lib/relationship/compass";
+import type { JungianFunctionInsight } from "@/lib/records/types";
+import {
+  aggregateSelfJungianFunctions,
+  extractMbtiType,
+  mergeSelfProfileInsights,
+} from "@/lib/relationship/self-profile";
 
 type SupabaseLike = any;
 
@@ -25,7 +31,9 @@ type ReflectionForMemory = {
     common_triggers: string[];
     health_score?: number | null;
     interaction_guide?: string;
+    jungian_functions?: JungianFunctionInsight[];
     joy_score?: number | null;
+    mbti_tendency?: string;
     nickname: string;
     relation_mode_tags?: string[] | null;
     relationship_pattern_summary: string;
@@ -153,20 +161,46 @@ export function buildMemoryEventsFromReflection(input: BuildMemoryInput) {
 }
 
 export function mergeMemoryProfile(existing: UserMemoryProfile | null, incoming: UserMemoryProfile): UserMemoryProfile {
+  const selfInsights = mergeSelfProfileInsights(
+    existing
+      ? {
+          jungian_functions: existing.jungian_functions || [],
+          mbti_source: existing.mbti_source || "inferred",
+          mbti_type: existing.mbti_type || "",
+        }
+      : null,
+    {
+      jungian_functions: incoming.jungian_functions || [],
+      mbti_source: incoming.mbti_source || "inferred",
+      mbti_type: incoming.mbti_type || "",
+    },
+  );
+
   return {
     caution_notes: unique([...(existing?.caution_notes || []), ...incoming.caution_notes], 8),
     common_triggers: unique([...(existing?.common_triggers || []), ...incoming.common_triggers], 12),
     core_needs: unique([...(existing?.core_needs || []), ...incoming.core_needs], 12),
+    ...selfInsights,
     recurring_patterns: unique([...(existing?.recurring_patterns || []), ...incoming.recurring_patterns], 10),
     support_style: cleanText(existing?.support_style) || cleanText(incoming.support_style),
   };
 }
 
 export function buildProfileFromReflection(input: BuildMemoryInput): UserMemoryProfile {
+  const mbtiType = input.reflection.compass_updates
+    .map((update) => extractMbtiType(update.mbti_tendency))
+    .find(Boolean) || "";
+
   return {
     caution_notes: DEFAULT_CAUTION_NOTES,
     common_triggers: unique(input.reflection.compass_updates.flatMap((update) => update.common_triggers), 12),
     core_needs: unique(input.reflection.underlying_needs, 12),
+    jungian_functions: aggregateSelfJungianFunctions(
+      [],
+      input.reflection.compass_updates.flatMap((update) => update.jungian_functions || []),
+    ),
+    mbti_source: "inferred",
+    mbti_type: mbtiType,
     recurring_patterns: unique([input.reflection.pattern], 10),
     support_style: "温柔、具体、不要贴标签；提醒历史模式时先询问是否贴近。",
   };
@@ -182,7 +216,7 @@ export async function persistUserMemory(supabase: SupabaseLike, input: BuildMemo
 
   const existingResponse = await supabase
     .from("user_memory_profiles")
-    .select("core_needs, recurring_patterns, common_triggers, support_style, caution_notes")
+    .select("core_needs, recurring_patterns, common_triggers, support_style, caution_notes, mbti_type, mbti_source, jungian_functions")
     .eq("user_id", input.userId)
     .maybeSingle();
 

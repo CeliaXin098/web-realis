@@ -15,14 +15,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, SoftPanel } from "@/components/ui/card";
+import type { UserMemoryProfile } from "@/lib/memory/types";
 import type { JungianFunctionInsight } from "@/lib/records/types";
 import {
   getQuadrantCopy,
   getRelationshipTemperature,
+  getRelationshipHeadline,
   getRelationshipWeather,
   normalizeCompassProfile,
   type NormalizedCompassProfile,
 } from "@/lib/relationship/compass";
+import { extractMbtiType, formatMbtiLabel } from "@/lib/relationship/self-profile";
 import { matchesProfile } from "@/lib/relationship/story-matching";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +37,7 @@ export type RelationshipProfile = {
   common_triggers: string[];
   relationship_pattern_summary: string;
   mbti_tendency: string;
+  mbti_source?: "inferred" | "confirmed";
   jungian_functions?: JungianFunctionInsight[];
   closeness_score?: number;
   health_score?: number | null;
@@ -63,6 +67,7 @@ export type RelationshipEvent = {
 type RelationshipBoardProps = {
   profiles: RelationshipProfile[];
   events: RelationshipEvent[];
+  selfProfile: UserMemoryProfile | null;
 };
 
 type NetworkPosition = {
@@ -70,9 +75,10 @@ type NetworkPosition = {
   top: number;
 };
 
-export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) {
+export function RelationshipBoard({ events, profiles, selfProfile }: RelationshipBoardProps) {
   const [selectedId, setSelectedId] = useState<string | undefined>(profiles[0]?.id);
   const [localProfiles, setLocalProfiles] = useState(profiles);
+  const [localSelfProfile, setLocalSelfProfile] = useState(selfProfile);
   const relationshipProfiles = useMemo(() => localProfiles.filter((profile) => !isSelfProfile(profile)), [localProfiles]);
   const normalizedProfiles = useMemo(
     () =>
@@ -98,21 +104,41 @@ export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) 
   }, [profiles]);
 
   useEffect(() => {
+    setLocalSelfProfile(selfProfile);
+  }, [selfProfile]);
+
+  useEffect(() => {
+    if (selectedId === "self") return;
     if (normalizedProfiles.length === 0) {
-      setSelectedId(undefined);
+      setSelectedId(localSelfProfile ? "self" : undefined);
       return;
     }
 
     if (!selectedId || !normalizedProfiles.some((profile) => profile.id === selectedId)) {
       setSelectedId(normalizedProfiles[0].id);
     }
-  }, [normalizedProfiles, selectedId]);
+  }, [localSelfProfile, normalizedProfiles, selectedId]);
+
+  async function updateSelfMbti(mbti: string) {
+    const response = await fetch("/api/self-profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mbti_type: mbti }),
+    });
+    if (!response.ok) {
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(result?.error || "保存失败");
+    }
+    const updated = (await response.json()) as UserMemoryProfile;
+    setLocalSelfProfile(updated);
+  }
 
   function updateMbti(id: string, mbti: string) {
     setLocalProfiles((current) =>
-      current.map((profile) => (profile.id === id ? { ...profile, mbti_tendency: mbti } : profile)),
+      current.map((profile) =>
+        profile.id === id ? { ...profile, mbti_tendency: mbti, mbti_source: "confirmed" } : profile,
+      ),
     );
-    persistPersonProfile({ id, mbti_tendency: mbti });
   }
 
   function updateNickname(id: string, nickname: string) {
@@ -138,14 +164,17 @@ export function RelationshipBoard({ events, profiles }: RelationshipBoardProps) 
           <CompassDashboardHeader profilesCount={normalizedProfiles.length} />
           <RelationshipQuadrantMap
             onRename={updateNickname}
+            onSelectSelf={() => setSelectedId("self")}
             profiles={normalizedProfiles}
-            selectedId={selected?.id}
+            selectedId={selectedId}
             onPositionChange={updatePosition}
             onSelect={setSelectedId}
           />
-          {selected ? <RelationshipArchive events={relatedEvents} profile={selected} /> : null}
+          {selectedId !== "self" && selected ? <RelationshipArchive events={relatedEvents} profile={selected} /> : null}
         </div>
-        {selected ? (
+        {selectedId === "self" ? (
+          <SelfDetail onMbtiSaved={updateSelfMbti} profile={localSelfProfile} />
+        ) : selected ? (
           <PersonDetail
             events={relatedEvents}
             onMbtiSaved={(mbti) => updateMbti(selected.id, mbti)}
@@ -204,12 +233,14 @@ function RelationshipQuadrantMap({
   onRename,
   onPositionChange,
   onSelect,
+  onSelectSelf,
   profiles,
   selectedId,
 }: {
   onRename: (id: string, nickname: string) => void;
   onPositionChange: (id: string, position: NetworkPosition) => void;
   onSelect: (id: string) => void;
+  onSelectSelf: () => void;
   profiles: NormalizedCompassProfile[];
   selectedId?: string;
 }) {
@@ -284,6 +315,8 @@ function RelationshipQuadrantMap({
           <NetworkCanvasBackground />
           <NetworkLinks items={positionedProfiles} origin={selfDisplayPosition} />
           <SelfNode
+            isSelected={selectedId === "self"}
+            onSelect={onSelectSelf}
             onStartDrag={(event) => {
               event.currentTarget.setPointerCapture(event.pointerId);
               setDraggingId("self");
@@ -577,10 +610,14 @@ function NetworkLinks({
 }
 
 function SelfNode({
+  isSelected,
+  onSelect,
   onStartDrag,
   position,
   zoom,
 }: {
+  isSelected: boolean;
+  onSelect: () => void;
   onStartDrag: (event: PointerEvent<HTMLButtonElement>) => void;
   position: NetworkPosition;
   zoom: number;
@@ -590,7 +627,12 @@ function SelfNode({
 
   return (
     <button
-      className="absolute z-40 flex -translate-x-1/2 -translate-y-1/2 touch-none select-none flex-col items-center text-center transition-[box-shadow,transform] duration-200 hover:scale-105 focus:outline-none focus-visible:ring-4 focus-visible:ring-sage/25"
+      aria-label="我自己"
+      className={cn(
+        "absolute z-40 flex -translate-x-1/2 -translate-y-1/2 touch-none select-none flex-col items-center text-center transition-[box-shadow,transform] duration-200 hover:scale-105 focus:outline-none focus-visible:ring-4 focus-visible:ring-sage/25",
+        isSelected && "scale-105",
+      )}
+      onClick={onSelect}
       onPointerDown={onStartDrag}
       style={{ left: `${position.left}%`, top: `${position.top}%` }}
       type="button"
@@ -979,6 +1021,135 @@ function getRelationStroke(type: NormalizedCompassProfile["relationType"]) {
   }
 }
 
+function SelfDetail({
+  onMbtiSaved,
+  profile,
+}: {
+  onMbtiSaved: (mbti: string) => Promise<void>;
+  profile: UserMemoryProfile | null;
+}) {
+  const [mbti, setMbti] = useState(extractMbtiType(profile?.mbti_type));
+  const [status, setStatus] = useState("");
+  const functions = completeJungianFunctions(profile?.jungian_functions || []);
+  const evidenceCount =
+    (profile?.core_needs.length || 0) +
+    (profile?.recurring_patterns.length || 0) +
+    (profile?.common_triggers.length || 0);
+  const selfAcceptance = Math.min(92, 42 + Math.min(evidenceCount, 10) * 5);
+  const innerAlignment = Math.min(90, 38 + Math.min(profile?.jungian_functions?.length || 0, 8) * 6);
+  const outward = profile?.recurring_patterns[0] || "还需要更多觉察记录，才能看见你惯常如何面对外界。";
+  const innerNeeds = profile?.core_needs.length ? profile.core_needs.join("、") : "还没有足够记录来辨认内心需要。";
+  const conflicts = profile?.common_triggers.length
+    ? `当${profile.common_triggers.slice(0, 3).join("、")}出现时，外在应对与内心需要可能会彼此拉扯。`
+    : "目前还没有足够记录形成稳定的内在冲突线索。";
+
+  useEffect(() => {
+    setMbti(extractMbtiType(profile?.mbti_type));
+  }, [profile?.mbti_type]);
+
+  async function saveMbti() {
+    const normalized = extractMbtiType(mbti);
+    if (!normalized || normalized !== mbti.trim().toUpperCase()) {
+      setStatus("请输入一个完整的四字母 MBTI 类型");
+      return;
+    }
+    setStatus("正在保存...");
+    try {
+      await onMbtiSaved(normalized);
+      setMbti(normalized);
+      setStatus("已保存为你的确认类型");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "保存失败，请稍后再试");
+    }
+  }
+
+  return (
+    <aside className="flex flex-col gap-4 rounded-[34px] border border-[#d8ccba] bg-[#fbf8f1]/92 p-4 shadow-[0_28px_80px_rgba(74,63,48,0.12)] backdrop-blur sm:p-5">
+      <section className="overflow-hidden rounded-[30px] border border-[#ded4c4] bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.96),transparent_30%),linear-gradient(135deg,#f1e7d8,#e5ddd2)] p-6">
+        <div className="flex items-center gap-5">
+          <div className="grid size-24 place-items-center rounded-full border-4 border-white bg-[#ead7c2] text-3xl font-semibold text-ink shadow-[0_18px_45px_rgba(74,63,48,0.16)]">
+            我
+          </div>
+          <div>
+            <Badge variant="warm">Self Relationship</Badge>
+            <h2 className="mt-3 text-4xl font-semibold text-ink">外在的我，与内心的我</h2>
+            <p className="font-sans-soft mt-2 text-sm leading-6 text-muted">这些线索来自你的长期觉察，会随着新记录继续变化。</p>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
+        <section className="flex min-h-48 flex-col items-center justify-center rounded-[26px] border border-[#ddd2c1] bg-[#fffaf2]/86 p-5 text-center">
+          <h3 className="font-sans-soft text-xl font-semibold text-ink">
+            MBTI{profile?.mbti_source === "inferred" ? "（推测）" : ""}
+          </h3>
+          <input
+            aria-label="我的 MBTI"
+            className="mt-5 w-full bg-transparent text-center text-5xl font-semibold uppercase text-ink outline-none placeholder:text-muted/30"
+            maxLength={4}
+            onChange={(event) => setMbti(event.target.value)}
+            placeholder="尚未形成"
+            value={mbti}
+          />
+          <button className="font-sans-soft mt-4 rounded-full bg-night px-4 py-2 text-xs font-medium text-paper" onClick={saveMbti} type="button">
+            确认我的 MBTI
+          </button>
+          {status ? <p className="font-sans-soft mt-3 text-xs text-muted">{status}</p> : null}
+        </section>
+        <section className="rounded-[26px] border border-[#d4c8dc] bg-[#f3edf4]/82 p-5">
+          <h3 className="font-sans-soft text-xl font-semibold text-ink">荣格八维线索</h3>
+          <div className="mt-5 space-y-2.5">
+            {functions.map((item) => (
+              <div className="grid grid-cols-[2rem_1fr_2.5rem] items-center gap-2" key={item.code}>
+                <span className="font-sans-soft text-xs text-muted">{item.code}</span>
+                <span className="h-1.5 rounded-full bg-[#e1d6c5]">
+                  <span className="block h-full rounded-full bg-[#b9aedf]" style={{ width: `${item.score * 18}%` }} />
+                </span>
+                <span className="font-sans-soft text-xs text-muted">{item.score * 20}%</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <SelfInsightCard label="外在表现" text={outward} />
+        <SelfInsightCard label="内心需要" text={innerNeeds} />
+      </section>
+
+      <section className="rounded-[26px] border border-[#e0c8bd] bg-[#fff0e8]/82 p-5">
+        <h3 className="font-sans-soft text-xl font-semibold text-ink">我与自己的关系线索</h3>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <SelfScore label="自我接纳度" value={selfAcceptance} />
+          <SelfScore label="内外一致度" value={innerAlignment} />
+        </div>
+        <p className="font-sans-soft mt-4 text-xs leading-6 text-muted">分数只表示当前记录中可见线索的丰富程度，不是对你的评判。</p>
+      </section>
+
+      <SelfInsightCard label="常见内在冲突" text={conflicts} />
+      <SelfInsightCard label="照顾自己的建议" text={profile?.support_style || "先允许感受存在，再决定此刻最需要怎样照顾自己。"} />
+    </aside>
+  );
+}
+
+function SelfInsightCard({ label, text }: { label: string; text: string }) {
+  return (
+    <section className="rounded-[26px] border border-[#ddd2c1] bg-[#fffaf2]/82 p-5">
+      <h3 className="font-sans-soft text-xl font-semibold text-ink">{label}</h3>
+      <p className="font-sans-soft mt-3 text-sm leading-7 text-muted">{text}</p>
+    </section>
+  );
+}
+
+function SelfScore({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-4 rounded-[22px] bg-white/55 p-4">
+      <span className="grid size-16 shrink-0 place-items-center rounded-full border border-[#e0c8bd] bg-white/75 text-xl font-semibold text-ink">{value}</span>
+      <span className="font-sans-soft text-sm font-semibold text-ink">{label}</span>
+    </div>
+  );
+}
+
 function PersonDetail({
   events,
   onMbtiSaved,
@@ -990,7 +1161,7 @@ function PersonDetail({
   onNicknameChange: (nickname: string) => void;
   profile: NormalizedCompassProfile;
 }) {
-  const [mbti, setMbti] = useState(profile.mbti_tendency || "");
+  const [mbti, setMbti] = useState(extractMbtiType(profile.mbti_tendency));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -1008,7 +1179,7 @@ function PersonDetail({
   ] as const;
 
   useEffect(() => {
-    setMbti(profile.mbti_tendency || "");
+    setMbti(extractMbtiType(profile.mbti_tendency));
     setDraftNickname(profile.nickname);
     setSaved(false);
     setSaveError("");
@@ -1049,9 +1220,9 @@ function PersonDetail({
   }
 
   function commitMbti() {
-    const nextMbti = mbti.trim().toUpperCase();
+    const nextMbti = extractMbtiType(mbti);
     setMbti(nextMbti);
-    if (nextMbti !== profile.mbti_tendency) {
+    if (nextMbti && (nextMbti !== extractMbtiType(profile.mbti_tendency) || profile.mbti_source !== "confirmed")) {
       void saveMbti(nextMbti);
     }
   }
@@ -1077,7 +1248,7 @@ function PersonDetail({
               />
               <Sparkles className="size-5 text-[#b98532]" />
             </h2>
-            <p className="font-sans-soft mt-2 text-sm text-muted">“我们总能在深夜找到彼此”</p>
+            <p className="font-sans-soft mt-2 text-sm leading-6 text-muted">{getRelationshipHeadline(profile)}</p>
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -1092,16 +1263,18 @@ function PersonDetail({
 
       <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
         <section className="flex min-h-48 flex-col items-center justify-center rounded-[26px] border border-[#ddd2c1] bg-[#fffaf2]/86 p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.62),0_12px_28px_rgba(74,63,48,0.05)]">
-          <h2 className="font-sans-soft text-xl font-semibold text-ink">MBTI</h2>
+          <h2 className="font-sans-soft text-xl font-semibold text-ink">
+            MBTI{profile.mbti_source === "confirmed" ? "" : "（推测）"}
+          </h2>
           <input
             aria-label="MBTI 手填"
-            className="mt-5 w-full bg-transparent text-center text-5xl font-semibold uppercase text-ink outline-none placeholder:text-muted/30"
+            className="mt-5 w-full bg-transparent text-center text-5xl font-semibold uppercase text-ink outline-none placeholder:text-lg placeholder:font-normal placeholder:normal-case placeholder:text-muted/45"
             onBlur={commitMbti}
             onChange={(event) => setMbti(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") commitMbti();
               if (event.key === "Escape") {
-                setMbti(profile.mbti_tendency || "");
+                setMbti(extractMbtiType(profile.mbti_tendency));
               }
             }}
             placeholder="INFJ"

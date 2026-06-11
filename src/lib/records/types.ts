@@ -43,6 +43,10 @@ export type ReflectionRecord = {
   title: string;
   summary: string;
   gentle_response: string;
+  conversation_messages?: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }> | null;
   emotional_root: string;
   underlying_needs: string[];
   pattern: string;

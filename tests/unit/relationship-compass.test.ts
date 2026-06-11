@@ -3,6 +3,7 @@ import {
   classifyQuadrant,
   getQuadrantCopy,
   getRelationshipTemperature,
+  getRelationshipHeadline,
   getRelationshipWeather,
   inferRelationModeTags,
   mapClosenessToTier,
@@ -189,5 +190,11 @@ describe("relationship compass logic", () => {
       profileCount: 0,
       label: "暂无天气",
     });
+  });
+
+  it("uses different headlines for different relationships", () => {
+    expect(getRelationshipHeadline({ relationType: "伴侣", quadrant: "q1" })).toContain("靠近");
+    expect(getRelationshipHeadline({ relationType: "同事", quadrant: "q2" })).toContain("合作");
+    expect(getRelationshipHeadline({ relationType: "家人", quadrant: "q4" })).toContain("边界");
   });
 });

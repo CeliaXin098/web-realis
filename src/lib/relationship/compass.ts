@@ -22,6 +22,7 @@ export type RawCompassProfile = {
   common_triggers: string[];
   relationship_pattern_summary: string;
   mbti_tendency: string;
+  mbti_source?: "inferred" | "confirmed";
   jungian_functions?: JungianFunctionInsight[];
   closeness_score?: number;
   health_score?: number | null;
@@ -186,6 +187,24 @@ export function getRelationshipTemperature(
     Math.min(profile.related_record_count, 5) * 2;
 
   return Math.max(20, Math.min(99, Math.round(score)));
+}
+
+export function getRelationshipHeadline({
+  quadrant,
+  relationType,
+}: Pick<NormalizedCompassProfile, "quadrant" | "relationType">) {
+  if (quadrant === "q4") return "“这段关系正在提醒我：靠近之前，也要守住边界”";
+
+  const copy: Record<RelationType, string> = {
+    朋友: "“我们可以分享快乐，也能坦诚说出不容易”",
+    同事: "“好的合作，不必以压住自己的感受为代价”",
+    伴侣: "“我们在靠近彼此，也学习不弄丢自己”",
+    家人: "“爱与边界，可以同时存在于家人之间”",
+    熟人: "“不必急着熟悉，舒服的距离也很好”",
+    其他: "“我可以慢一点，看看这段关系带来的感受”",
+  };
+
+  return copy[relationType];
 }
 
 export function getRelationshipWeather(profiles: NormalizedCompassProfile[]): RelationshipWeatherSummary {

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildReflectionChatPrompt, buildReflectionPrompt } from "@/lib/ai/prompt";
+import { isCompletionTruncated } from "@/lib/ai/completion";
 import { getOpenAIClientOptions } from "@/lib/ai/openai-config";
 import { parseReflectionContent } from "@/lib/ai/reflection-parser";
 import { getMockReflection, isE2EMode } from "@/lib/e2e/mock-reflection";
@@ -15,7 +16,7 @@ const conversationMessageSchema = z.object({
 
 const inputSchema = z.object({
   mode: z.enum(["chat", "final"]).default("final"),
-  eventText: z.string().min(10),
+  eventText: z.string().min(1),
   emotionTags: z.array(z.string()).default([]),
   emotionIntensity: z.number().int().min(1).max(10),
   relatedPerson: z.string().optional(),
@@ -101,8 +102,12 @@ export async function POST(request: Request) {
           },
         ],
         temperature: 0.55,
-        max_tokens: 700,
+        max_tokens: 1400,
       });
+
+      if (isCompletionTruncated(completion.choices[0]?.finish_reason)) {
+        return jsonError("AI 回答超过了长度限制，请重新发送一次。", 502, "AI_RESPONSE_TRUNCATED");
+      }
 
       const reply = completion.choices[0]?.message.content;
       if (!reply) {
@@ -126,8 +131,12 @@ export async function POST(request: Request) {
       ],
       response_format: { type: "json_object" },
       temperature: 0.4,
-      max_tokens: 2200,
+      max_tokens: 5000,
     });
+
+    if (isCompletionTruncated(completion.choices[0]?.finish_reason)) {
+      return jsonError("觉察信超过了长度限制，请重新生成一次。", 502, "AI_RESPONSE_TRUNCATED");
+    }
 
     const content = completion.choices[0]?.message.content;
     if (!content) {

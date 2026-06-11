@@ -28,9 +28,12 @@ describe("AI prompt builders", () => {
     expect(prompt).toContain("relation_mode_tags");
     expect(prompt).toContain("jungian_functions");
     expect(prompt).toContain("reasoning_notes");
+    expect(prompt).toContain("summary 必须忠实概括用户的具体事件与对话");
+    expect(prompt).toContain("不能补写用户没有提到的事实");
     expect(prompt).toContain("推断依据");
     expect(prompt).toContain("推荐理由");
     expect(prompt).toContain("Ni, Ne, Si, Se, Ti, Te, Fi, Fe");
+    expect(prompt).toContain("mbti_tendency 只能填写一个最可能的四字母 MBTI");
     expect(prompt).toContain("严格 JSON");
   });
 

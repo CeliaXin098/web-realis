@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -8,10 +9,12 @@ import {
   Home,
   Loader2,
   MessageCircle,
-  Paperclip,
+  PencilLine,
+  RotateCcw,
   Send,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ReflectionResult } from "@/components/reflection-result";
@@ -22,9 +25,12 @@ import type { ReflectionOutput } from "@/lib/ai/reflection-schema";
 import {
   buildReflectionCalendar,
   buildReflectionInsight,
+  getRecentTimelineLabel,
   getRecentReflectionTimeline,
   type ReflectionSidebarRecord,
 } from "@/lib/reflection/reflect-sidebar";
+import { getConversationEventText, prepareConversationEdit } from "@/lib/reflection/conversation";
+import { createEmptyReflectionSession } from "@/lib/reflection/session";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = {
@@ -33,8 +39,7 @@ type ChatMessage = {
 };
 
 const emotionOptions = ["平静", "喜悦", "焦虑", "疲惫", "愤怒", "迷茫", "孤独", "委屈"];
-const quickPeople = ["他（同事）", "朋友", "妈妈"];
-const insightTags = ["被理解", "轻松自在", "彼此支持", "共同成长", "其他"];
+const quickPeople = ["朋友", "同事", "伴侣", "妈妈", "爸爸", "儿子", "女儿", "其他"];
 const REFLECT_DRAFT_STORAGE_KEY = "realis.reflect.draft.v1";
 
 type ReflectDraft = {
@@ -65,9 +70,16 @@ export default function ReflectPage() {
   const [records, setRecords] = useState<ReflectionSidebarRecord[]>([]);
   const [recordStatus, setRecordStatus] = useState<"loading" | "ready" | "guest">("loading");
   const draftLoadedRef = useRef(false);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   const payload = useMemo(
-    () => ({ eventText, emotionTags, emotionIntensity, relatedPerson, conversationMessages: messages }),
+    () => ({
+      eventText: getConversationEventText(eventText, messages),
+      emotionTags,
+      emotionIntensity,
+      relatedPerson,
+      conversationMessages: messages,
+    }),
     [emotionIntensity, emotionTags, eventText, messages, relatedPerson],
   );
   const today = new Date();
@@ -180,7 +192,7 @@ export default function ReflectPage() {
   async function sendChatMessage(overrideText?: string) {
     const userText = chatInput.trim() || eventText.trim();
     const nextUserText = overrideText || userText;
-    if (nextUserText.length < 10) return;
+    if (!nextUserText.trim()) return;
 
     setError("");
     setSaved(false);
@@ -189,23 +201,56 @@ export default function ReflectPage() {
     setChatLoading(true);
 
     const nextMessages: ChatMessage[] = [...messages, { role: "user", content: nextUserText }];
+    const requestEventText = getConversationEventText(eventText, nextMessages);
+    setStarted(true);
     setMessages(nextMessages);
 
-    const response = await fetch("/api/reflect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, mode: "chat", conversationMessages: nextMessages }),
-    });
+    chatAbortRef.current?.abort();
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
 
-    const data = await response.json();
-    setChatLoading(false);
+    try {
+      const response = await fetch("/api/reflect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, eventText: requestEventText, mode: "chat", conversationMessages: nextMessages }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      setError(data.error || "AI 暂时没有回应，请稍后再试。");
-      return;
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "AI 暂时没有回应，请稍后再试。");
+        return;
+      }
+
+      setMessages([...nextMessages, { role: "assistant", content: data.reply }]);
+    } catch (requestError) {
+      if (!(requestError instanceof DOMException && requestError.name === "AbortError")) {
+        setError("AI 暂时没有回应，请稍后再试。");
+      }
+    } finally {
+      if (chatAbortRef.current === controller) {
+        chatAbortRef.current = null;
+        setChatLoading(false);
+      }
     }
+  }
 
-    setMessages([...nextMessages, { role: "assistant", content: data.reply }]);
+  function cancelChatResponse() {
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    setChatLoading(false);
+  }
+
+  function editChatMessage(index: number) {
+    const edit = prepareConversationEdit(messages, index);
+    if (!edit) return;
+
+    cancelChatResponse();
+    setMessages(edit.messages);
+    setChatInput(edit.input);
+    setReflection(null);
+    setSaved(false);
   }
 
   async function generateReflection() {
@@ -266,10 +311,32 @@ export default function ReflectPage() {
     setEventText((current) => appendTranscript(current, text));
   }
 
+  function startNewReflection() {
+    const empty = createEmptyReflectionSession();
+    cancelChatResponse();
+    setEventText(empty.eventText);
+    setRelatedPerson(empty.relatedPerson);
+    setEmotionIntensity(empty.emotionIntensity);
+    setEmotionTags(empty.emotionTags);
+    setChatInput(empty.chatInput);
+    setMessages(empty.messages);
+    setReflection(empty.reflection);
+    setStarted(empty.started);
+    setSaved(empty.saved);
+    setError(empty.error);
+    setFinalLoading(false);
+    setSaving(false);
+    window.localStorage.removeItem(REFLECT_DRAFT_STORAGE_KEY);
+  }
+
   return (
     <main className="mx-auto w-full max-w-[1780px] px-4 py-6 sm:px-7 lg:py-8">
-      <div className="grid gap-5 xl:grid-cols-[minmax(440px,0.92fr)_minmax(620px,1.18fr)_minmax(400px,0.9fr)]">
-        <section className="rounded-[28px] border border-[#e0d8ca] bg-[#fbf8f1]/88 p-6 shadow-[0_26px_80px_rgba(74,63,48,0.08)] sm:p-8">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.38fr)]">
+        {!started && !reflection ? (
+        <section
+          className="h-fit self-start rounded-[28px] border border-[#e0d8ca] bg-[#fbf8f1]/88 p-6 shadow-[0_26px_80px_rgba(74,63,48,0.08)] sm:p-8"
+          data-testid="reflection-form-card"
+        >
           <div className="flex items-start justify-between gap-5">
             <div>
               <h1 className="text-5xl font-semibold leading-tight text-ink">AI 觉察</h1>
@@ -330,7 +397,7 @@ export default function ReflectPage() {
               </div>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-[1fr_160px]">
+            <div className="grid gap-5 sm:grid-cols-[minmax(240px,420px)_160px]">
               <div>
                 <label className="font-sans-soft text-base font-semibold text-ink" htmlFor="person">
                   相关人物
@@ -388,7 +455,7 @@ export default function ReflectPage() {
 
             <Button
               aria-label="开始觉察"
-              className="min-h-14 w-full rounded-[18px] text-base"
+              className="min-h-14 w-fit rounded-[18px] px-7 text-base"
               disabled={chatLoading || !canStart}
               onClick={startReflection}
               type="button"
@@ -396,10 +463,10 @@ export default function ReflectPage() {
               {chatLoading && !started ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               开始与 AI 深度对话
             </Button>
-            <p className="font-sans-soft text-center text-xs text-muted">AI 会基于你的记录生成深度对话和觉察信</p>
+            <p className="font-sans-soft text-xs text-muted">AI 会基于你的记录生成深度对话和觉察信</p>
           </div>
         </section>
-
+        ) : (
         <ConversationPanel
           chatInput={chatInput}
           chatLoading={chatLoading}
@@ -409,12 +476,17 @@ export default function ReflectPage() {
           saved={saved}
           saving={saving}
           started={started}
+          onCancel={cancelChatResponse}
+          onBack={() => setStarted(false)}
+          onEdit={editChatMessage}
           onGenerate={generateReflection}
           onInputChange={setChatInput}
+          onNewRound={startNewReflection}
           onVoiceInput={(text) => setChatInput((current) => appendTranscript(current, text))}
           onSave={saveRecord}
           onSend={() => sendChatMessage()}
         />
+        )}
 
         <InsightSidebar
           assistantCount={assistantMessages.length}
@@ -463,8 +535,12 @@ function ConversationPanel({
   saved,
   saving,
   started,
+  onBack,
+  onCancel,
+  onEdit,
   onGenerate,
   onInputChange,
+  onNewRound,
   onVoiceInput,
   onSave,
   onSend,
@@ -477,15 +553,37 @@ function ConversationPanel({
   saved: boolean;
   saving: boolean;
   started: boolean;
+  onBack: () => void;
+  onCancel: () => void;
+  onEdit: (index: number) => void;
   onGenerate: () => void;
   onInputChange: (value: string) => void;
+  onNewRound: () => void;
   onVoiceInput: (text: string) => void;
   onSave: () => void;
   onSend: () => void;
 }) {
+  const messageScrollRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const container = messageScrollRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [chatLoading, messages]);
+
+  useEffect(() => {
+    const input = chatInputRef.current;
+    if (!input) return;
+    input.style.height = "0px";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [chatInput]);
+
   return (
-    <section className="min-h-[720px] rounded-[28px] border border-[#e0d8ca] bg-[#fbf8f1]/82 p-6 shadow-[0_26px_80px_rgba(74,63,48,0.08)] sm:p-7">
-      <div className="flex items-start justify-between gap-4">
+    <section
+      className="box-border flex h-[calc(100vh-3rem)] min-h-[780px] max-h-[1120px] min-w-0 self-start flex-col overflow-hidden rounded-[28px] border border-[#e0d8ca] bg-[#fbf8f1]/82 shadow-[0_26px_80px_rgba(74,63,48,0.08)]"
+      data-testid="conversation-card"
+    >
+      <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6 sm:px-7 sm:pt-7">
         <div>
           <h2 className="text-3xl font-semibold text-ink">
             {reflection ? "一封给你的觉察信" : "与 AI 的深度对话"}
@@ -495,73 +593,107 @@ function ConversationPanel({
             {reflection ? "已沉淀为结果" : started ? "正在对话中..." : "等待开始"}
           </p>
         </div>
-        <MessageCircle className="size-6 text-[#b98532]" />
+        <div className="flex items-center gap-2">
+          {!reflection ? (
+            <button
+              className="font-sans-soft inline-flex items-center gap-2 rounded-full border border-[#ded6c8] bg-white/62 px-4 py-2 text-sm text-muted transition hover:bg-white hover:text-ink"
+              onClick={onBack}
+              type="button"
+            >
+              <ArrowLeft className="size-4" />
+              返回补充信息
+            </button>
+          ) : null}
+          <MessageCircle className="size-6 text-[#b98532]" />
+        </div>
       </div>
 
       {reflection ? (
-        <div className="mt-8 max-h-[780px] overflow-y-auto pr-1">
+        <div className="mt-8 min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6 sm:px-7 sm:pb-7">
           <ReflectionResult onSave={onSave} reflection={reflection} saved={saved} saving={saving} />
+          <Button className="mt-5 w-full" onClick={onNewRound} type="button" variant="secondary">
+            <RotateCcw className="size-4" />
+            开始新一轮觉察
+          </Button>
         </div>
       ) : (
-        <div className="mt-8 flex h-[calc(100%-78px)] min-h-[620px] flex-col">
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        <div className="mt-8 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 sm:px-7" ref={messageScrollRef}>
             {!started ? (
               <EmptyConversation />
             ) : (
               messages.map((message, index) => (
-                <ChatBubble key={`${message.role}-${index}`} message={message} time={`10:${30 + index}`} />
+                <ChatBubble
+                  index={index}
+                  key={`${message.role}-${index}`}
+                  message={message}
+                  onEdit={onEdit}
+                  time={`10:${30 + index}`}
+                />
               ))
             )}
             {chatLoading ? (
-              <div className="mr-auto inline-flex items-center gap-2 rounded-full border border-[#ded6c8] bg-white/76 px-4 py-2 text-sm text-muted">
-                <Loader2 className="size-4 animate-spin" />
-                AI 正在回应...
+              <div className="mr-auto flex items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#ded6c8] bg-white/76 px-4 py-2 text-sm text-muted">
+                  <Loader2 className="size-4 animate-spin" />
+                  AI 正在回应...
+                </div>
+                <button
+                  className="font-sans-soft inline-flex items-center gap-1 rounded-full border border-[#ded6c8] bg-white/62 px-3 py-2 text-xs text-muted transition hover:bg-white hover:text-ink"
+                  onClick={onCancel}
+                  type="button"
+                >
+                  <X className="size-3.5" />
+                  取消
+                </button>
               </div>
             ) : null}
           </div>
 
-          {messages.some((message) => message.role === "assistant") ? (
-            <div className="mb-4 mt-5 flex flex-wrap gap-2">
-              {insightTags.map((tag) => (
-                <span className="font-sans-soft rounded-full border border-[#ded6c8] bg-white/62 px-4 py-2 text-xs text-muted" key={tag}>
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="grid gap-3 rounded-[24px] border border-[#ded6c8] bg-white/76 p-3 sm:grid-cols-[1fr_auto]">
-            <div className="flex items-center gap-3">
-              <Input
+          <div
+            className="mx-4 mb-4 mt-4 max-h-[320px] shrink-0 overflow-y-auto rounded-[24px] border border-[#ded6c8] bg-white/76 shadow-[0_12px_34px_rgba(74,63,48,0.06)] sm:mx-7 sm:mb-5"
+            data-testid="chat-composer"
+          >
+            <div className="px-4 pt-3">
+              <Textarea
                 aria-label="继续和 AI 说"
-                className="border-0 bg-transparent px-2 text-base shadow-none focus:ring-0"
+                className="min-h-[72px] resize-none overflow-hidden rounded-none border-0 bg-transparent px-1 py-2 text-base shadow-none focus:ring-0"
                 onChange={(event) => onInputChange(event.target.value)}
                 placeholder="继续分享你的想法..."
+                ref={chatInputRef}
+                rows={1}
                 value={chatInput}
               />
-              <Paperclip className="hidden size-5 text-muted sm:block" />
+            </div>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,0.96)_28%)] px-4 pb-3 pt-5">
               <VoiceInputButton
-                className="min-h-12 min-w-24 whitespace-nowrap px-4 text-base"
+                className="size-11 min-h-11 shrink-0 px-0"
                 iconClassName="size-5"
                 onTranscript={onVoiceInput}
+                showText={false}
               />
+              <Button
+                aria-label="发送给 AI"
+                className="size-11 min-h-11 rounded-full px-0"
+                disabled={chatLoading || !chatInput.trim()}
+                onClick={onSend}
+                type="button"
+              >
+                {chatLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              </Button>
             </div>
-            <Button disabled={chatLoading} onClick={onSend} type="button">
-              {chatLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              发送
-            </Button>
           </div>
 
           {messages.some((message) => message.role === "assistant") ? (
             <Button
-              className="mt-3 w-full"
+              className="mx-6 mb-5 mt-3 w-fit px-6 sm:mx-7"
               disabled={finalLoading}
               onClick={onGenerate}
               type="button"
               variant="secondary"
             >
               {finalLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              沉淀为结果
+              {finalLoading ? "正在整理觉察信..." : "沉淀为结果"}
             </Button>
           ) : null}
         </div>
@@ -575,23 +707,33 @@ function EmptyConversation() {
     <div className="grid h-full place-items-center rounded-[24px] border border-dashed border-[#ded6c8] bg-white/38 p-8 text-center">
       <div className="max-w-sm">
         <Sparkles className="mx-auto size-7 text-[#b98532]" />
-        <h3 className="mt-5 text-3xl font-semibold leading-tight text-ink">先在左侧写下今天的片刻</h3>
+        <h3 className="mt-5 text-3xl font-semibold leading-tight text-ink">从此刻最想说的话开始</h3>
         <p className="font-sans-soft mt-4 text-sm leading-7 text-muted">
-          点击“开始与 AI 深度对话”后，这里会接住你的第一段记录，并陪你继续往深处看。
+          你可以直接在下方开始对话，也可以先在左侧整理今天发生的事。
         </p>
       </div>
     </div>
   );
 }
 
-function ChatBubble({ message, time }: { message: ChatMessage; time: string }) {
+function ChatBubble({
+  index,
+  message,
+  onEdit,
+  time,
+}: {
+  index: number;
+  message: ChatMessage;
+  onEdit: (index: number) => void;
+  time: string;
+}) {
   const isUser = message.role === "user";
 
   return (
     <div className={cn("flex items-end gap-3", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[78%] rounded-[22px] px-5 py-4 text-sm leading-7 shadow-[0_12px_34px_rgba(74,63,48,0.06)]",
+          "max-w-[82%] rounded-[22px] px-5 py-4 text-base leading-8 shadow-[0_12px_34px_rgba(74,63,48,0.06)] sm:text-lg sm:leading-9",
           isUser
             ? "bg-[#e8dfd3] text-ink"
             : "border border-[#ded6c8] bg-white/76 text-ink",
@@ -599,7 +741,15 @@ function ChatBubble({ message, time }: { message: ChatMessage; time: string }) {
       >
         {!isUser ? <Sparkles className="mb-2 size-4 text-[#b98532]" /> : null}
         <p>{message.content}</p>
-        <p className="font-sans-soft mt-2 text-right text-xs text-muted">{time}</p>
+        <div className="font-sans-soft mt-2 flex items-center justify-end gap-3 text-xs text-muted">
+          {isUser ? (
+            <button className="inline-flex items-center gap-1 transition hover:text-ink" onClick={() => onEdit(index)} type="button">
+              <PencilLine className="size-3" />
+              编辑
+            </button>
+          ) : null}
+          <span>{time}</span>
+        </div>
       </div>
       {isUser ? <div className="size-10 rounded-full bg-[linear-gradient(135deg,#dcc8b6,#f5eee2)] shadow-inner" /> : null}
     </div>
@@ -783,7 +933,9 @@ function TimelineCard({
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-ink">觉察时间轴</h2>
-          <p className="font-sans-soft mt-1 text-sm text-muted">最近四条记录</p>
+          <p className="font-sans-soft mt-1 text-sm text-muted">
+            {recordStatus === "loading" ? "正在读取记录" : getRecentTimelineLabel(items.length)}
+          </p>
         </div>
       </div>
       <div className="mt-6 space-y-5">

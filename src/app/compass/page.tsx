@@ -6,6 +6,7 @@ import { Card, SoftPanel } from "@/components/ui/card";
 import { RelationshipBoard, type RelationshipEvent, type RelationshipProfile } from "@/components/relationship-board";
 import { isE2EMode } from "@/lib/e2e/mock-reflection";
 import { getE2ERecords } from "@/lib/e2e/store";
+import type { UserMemoryProfile } from "@/lib/memory/types";
 import type { ReflectionRecord } from "@/lib/records/types";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
@@ -30,7 +31,7 @@ export default async function CompassPage() {
         interaction_guide: update.interaction_guide,
       })),
     );
-    return <Compass events={toRelationshipEvents(records)} profiles={profiles} />;
+    return <Compass events={toRelationshipEvents(records)} profiles={profiles} selfProfile={buildE2ESelfProfile(records)} />;
   }
 
   if (!isSupabaseConfigured()) {
@@ -46,15 +47,20 @@ export default async function CompassPage() {
     return <LoginRequired />;
   }
 
-  const [{ data: profilesData }, { data: recordsData }] = await Promise.all([
+  const [{ data: profilesData }, { data: recordsData }, { data: selfProfileData }] = await Promise.all([
     supabase.from("person_profiles").select("*").order("updated_at", { ascending: false }),
     supabase.from("reflection_records").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("user_memory_profiles")
+      .select("core_needs, recurring_patterns, common_triggers, support_style, caution_notes, mbti_type, mbti_source, jungian_functions")
+      .maybeSingle(),
   ]);
 
   return (
     <Compass
       events={toRelationshipEvents((recordsData || []) as ReflectionRecord[])}
       profiles={(profilesData || []) as RelationshipProfile[]}
+      selfProfile={(selfProfileData || null) as UserMemoryProfile | null}
     />
   );
 }
@@ -62,9 +68,11 @@ export default async function CompassPage() {
 function Compass({
   events,
   profiles,
+  selfProfile,
 }: {
   events: RelationshipEvent[];
   profiles: RelationshipProfile[];
+  selfProfile: UserMemoryProfile | null;
 }) {
   return (
     <main className="mx-auto w-full max-w-[1500px] px-4 py-10 sm:px-6 lg:py-14">
@@ -97,9 +105,28 @@ function Compass({
         </SoftPanel>
       </section>
 
-      {profiles.length === 0 ? <EmptyCompass /> : <RelationshipBoard events={events} profiles={profiles} />}
+      {profiles.length === 0 && !selfProfile ? (
+        <EmptyCompass />
+      ) : (
+        <RelationshipBoard events={events} profiles={profiles} selfProfile={selfProfile} />
+      )}
     </main>
   );
+}
+
+function buildE2ESelfProfile(records: ReflectionRecord[]): UserMemoryProfile | null {
+  if (records.length === 0) return null;
+  const updates = records.flatMap((record) => record.compass_updates);
+  return {
+    caution_notes: [],
+    common_triggers: Array.from(new Set(updates.flatMap((update) => update.common_triggers))),
+    core_needs: Array.from(new Set(records.flatMap((record) => record.underlying_needs))),
+    jungian_functions: updates.flatMap((update) => update.jungian_functions || []),
+    mbti_source: "inferred",
+    mbti_type: updates.find((update) => update.mbti_tendency)?.mbti_tendency || "",
+    recurring_patterns: Array.from(new Set(records.map((record) => record.pattern))),
+    support_style: "温柔、具体地理解自己。",
+  };
 }
 
 function toRelationshipEvents(records: ReflectionRecord[]): RelationshipEvent[] {

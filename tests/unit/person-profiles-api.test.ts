@@ -57,6 +57,7 @@ describe("/api/person-profiles PATCH", () => {
     expect(capturedUpdate).toMatchObject({
       nickname: "林然",
       mbti_tendency: "INFJ",
+      mbti_source: "confirmed",
       position_x: 42.5,
       position_y: 58.25,
       relation_label: "互相鼓励",

@@ -3,6 +3,7 @@
 import { CalendarDays, ChevronDown, ChevronUp, Film, GalleryVerticalEnd, Heart, Music, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReflectionRecord } from "@/lib/records/types";
+import { getGalleryRecordExcerpt } from "@/lib/records/gallery";
 import { cn } from "@/lib/utils";
 
 const memoryPhotos = [
@@ -75,12 +76,12 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
   }
 
   return (
-    <section className="relative left-1/2 -mt-4 min-h-[1010px] w-screen -translate-x-1/2 overflow-visible px-6 sm:px-10">
+    <section className="relative left-1/2 -mt-4 min-h-[1300px] w-screen -translate-x-1/2 overflow-visible px-6 sm:px-10">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(circle_at_18%_38%,rgba(255,255,255,0.72),rgba(236,226,208,0.22)_38%,transparent_68%)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[linear-gradient(90deg,rgba(108,90,64,0.04)_1px,transparent_1px),linear-gradient(180deg,rgba(108,90,64,0.03)_1px,transparent_1px)] bg-[size:92px_92px] opacity-55" />
 
-      <div className="relative mx-auto grid min-h-[1010px] max-w-[1720px] gap-14 lg:grid-cols-[0.66fr_1.34fr] xl:grid-cols-[0.62fr_1.38fr]">
-        <div className="relative min-h-[1010px] overflow-visible">
+      <div className="relative mx-auto grid min-h-[1300px] max-w-[1720px] gap-14 lg:grid-cols-[0.66fr_1.34fr] xl:grid-cols-[0.62fr_1.38fr]">
+        <div className="relative min-h-[1260px] overflow-visible">
           <div className="relative z-30 -ml-20 flex max-w-[960px] items-start gap-7">
             <div className="flex shrink-0 items-center gap-5 rounded-[32px] border border-line/70 bg-[#faf7ef]/82 p-6 shadow-[0_16px_44px_rgba(84,65,44,0.07)] backdrop-blur">
               <span className="grid size-16 place-items-center rounded-[22px] bg-moss text-white shadow-lg shadow-moss/20">
@@ -93,8 +94,8 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
             </div>
           </div>
 
-          <div className="relative mt-4 h-[840px] overflow-visible" onWheel={handleWheel}>
-            <div className="absolute left-[28%] top-1/2 h-[840px] w-[760px] -translate-x-1/2 -translate-y-1/2 overflow-visible">
+          <div className="relative mt-4 h-[700px] overflow-visible" onWheel={handleWheel}>
+            <div className="absolute left-[28%] top-1/2 h-[700px] w-[760px] -translate-x-1/2 -translate-y-1/2 overflow-visible">
               {visibleMemories.map(({ record, index, offset }) => (
                 <VerticalMemoryCard
                   active={offset === 0}
@@ -127,6 +128,11 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
                 <ChevronDown className="size-5" />
               </button>
             </div>
+          </div>
+
+          <div className="relative left-1/2 z-30 mt-5 w-full max-w-[648px] -translate-x-1/2 space-y-5 lg:left-[28%]">
+            <SummaryReviewCard record={activeRecord} />
+            <ConversationReviewCard record={activeRecord} />
           </div>
         </div>
 
@@ -210,7 +216,9 @@ function VerticalMemoryCard({
           {record.title}
         </span>
         {active ? (
-          <span className="mt-4 block line-clamp-3 font-sans-soft text-lg leading-8 text-white/90 drop-shadow">{record.summary}</span>
+          <span className="mt-4 block line-clamp-3 font-sans-soft text-lg leading-8 text-white/90 drop-shadow">
+            {getGalleryRecordExcerpt(record)}
+          </span>
         ) : null}
       </span>
     </button>
@@ -221,10 +229,10 @@ function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
   const reasoningNotes = record.reasoning_notes;
 
   return (
-    <aside className="relative mt-10 min-h-[900px] overflow-visible py-2 lg:pr-6">
+    <aside className="relative mt-10 min-h-[900px] overflow-visible py-2 lg:pr-6" data-testid="gallery-detail-panel">
       <div className="pointer-events-none absolute right-0 top-8 h-56 w-56 rounded-full bg-gold/14 blur-3xl" />
       <div className="relative min-h-[860px] rounded-[34px] border border-[#d8c9b3] bg-[#f3f0e8]/96 p-6 shadow-[0_24px_76px_rgba(84,65,44,0.14)] backdrop-blur">
-        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr] xl:items-stretch">
+        <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <header className="rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef] p-6 shadow-[0_16px_44px_rgba(84,65,44,0.07)]">
             <p className="font-sans-soft text-2xl font-semibold tracking-[0.08em] text-clay">当前记忆</p>
             <time className="font-sans-soft mt-5 flex items-center gap-2 text-lg text-muted">
@@ -234,7 +242,6 @@ function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
             <h2 className="text-balance mt-5 text-[3.5rem] font-semibold leading-tight tracking-[-0.045em] text-ink xl:text-[4rem]">
               {record.title}
             </h2>
-            <p className="mt-5 text-xl leading-9 text-muted">{record.summary}</p>
           </header>
 
           <InfoCard title="当时记录">
@@ -246,7 +253,7 @@ function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
                 </span>
               ))}
               <span className="font-sans-soft rounded-full bg-gold/14 px-3 py-1 text-base font-medium text-[#7b6330]">
-                强度 {record.emotion_intensity}/10
+                强度等级 {record.emotion_intensity}/10
               </span>
               {record.related_person ? (
                 <span className="font-sans-soft rounded-full bg-clay/12 px-3 py-1 text-base font-medium text-clay">
@@ -309,6 +316,63 @@ function ReasonNote({
     <p className="font-sans-soft mt-4 rounded-2xl bg-[#ece6da] px-4 py-3 text-sm leading-6 text-muted">
       {label}：{basis?.trim() || fallback}
     </p>
+  );
+}
+
+function ConversationReviewCard({ record }: { record: ReflectionRecord }) {
+  if (!record.conversation_messages?.length) {
+    return (
+      <article
+        className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
+        data-testid="gallery-left-conversation"
+      >
+        <h3 className="font-sans-soft text-2xl font-semibold text-sage">与 AI 的对话回看</h3>
+        <p className="font-sans-soft mt-4 text-sm leading-7 text-muted">这条记忆没有保存对话内容。</p>
+      </article>
+    );
+  }
+
+  return (
+    <article
+      className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
+      data-testid="gallery-left-conversation"
+    >
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h3 className="font-sans-soft text-2xl font-semibold text-sage">与 AI 的对话回看</h3>
+          <p className="font-sans-soft mt-2 text-sm text-muted">回到当时被听见的片刻</p>
+        </div>
+        <span className="font-sans-soft rounded-full bg-[#eee7dc] px-3 py-1 text-xs text-muted">
+          {record.conversation_messages.length} 条
+        </span>
+      </div>
+      <div className="mt-5 max-h-72 space-y-3 overflow-y-auto pr-2">
+        {record.conversation_messages.map((message, index) => (
+          <p
+            className={cn(
+              "rounded-2xl px-4 py-3 text-sm leading-7",
+              message.role === "user" ? "ml-7 bg-[#e8dfd3] text-ink" : "mr-7 bg-white/78 text-muted",
+            )}
+            key={`${message.role}-${index}`}
+          >
+            {message.content}
+          </p>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function SummaryReviewCard({ record }: { record: ReflectionRecord }) {
+  return (
+    <article
+      className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
+      data-testid="gallery-left-summary"
+    >
+      <p className="font-sans-soft text-sm font-medium tracking-[0.08em] text-clay">AI 觉察总结</p>
+      <h3 className="mt-3 text-2xl font-semibold leading-tight text-ink">{record.title}</h3>
+      <p className="mt-4 text-base leading-8 text-muted">{record.summary}</p>
+    </article>
   );
 }
 

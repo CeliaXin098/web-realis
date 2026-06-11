@@ -8,10 +8,13 @@ import { normalizeCompassProfile } from "@/lib/relationship/compass";
 import { createClient } from "@/lib/supabase/server";
 
 const saveSchema = z.object({
-  eventText: z.string().min(10),
+  eventText: z.string().min(1),
   emotionTags: z.array(z.string()).default([]),
   emotionIntensity: z.number().int().min(1).max(10),
   relatedPerson: z.string().optional(),
+  conversationMessages: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) }))
+    .default([]),
   reflection: reflectionSchema,
 });
 
@@ -44,6 +47,8 @@ export async function POST(request: Request) {
       emotionTags: body.emotionTags || [],
       emotionIntensity: body.emotionIntensity || 5,
       relatedPerson: body.relatedPerson,
+      conversationMessages: body.conversationMessages || [],
+      reflection: body.reflection,
     });
     return NextResponse.json(record);
   }
@@ -58,7 +63,7 @@ export async function POST(request: Request) {
   const parsed = saveSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
 
-  const { eventText, emotionTags, emotionIntensity, relatedPerson, reflection } = parsed.data;
+  const { eventText, emotionTags, emotionIntensity, relatedPerson, conversationMessages, reflection } = parsed.data;
   const { data, error } = await supabase
     .from("reflection_records")
     .insert({
@@ -70,6 +75,7 @@ export async function POST(request: Request) {
       title: reflection.title,
       summary: reflection.summary,
       gentle_response: reflection.gentle_response,
+      conversation_messages: conversationMessages,
       emotional_root: reflection.emotional_root,
       underlying_needs: reflection.underlying_needs,
       pattern: reflection.pattern,
@@ -100,7 +106,7 @@ export async function POST(request: Request) {
   for (const update of reflection.compass_updates) {
     const { data: existingProfile } = await supabase
       .from("person_profiles")
-      .select("id, related_record_count, common_triggers, position_x, position_y, relation_label")
+      .select("id, related_record_count, common_triggers, position_x, position_y, relation_label, mbti_tendency, mbti_source")
       .eq("user_id", user.id)
       .eq("relationship_type", update.relationship_type)
       .eq("nickname", update.nickname)
@@ -114,7 +120,8 @@ export async function POST(request: Request) {
         related_record_count: (existingProfile?.related_record_count || 0) + 1,
         common_triggers: mergeTextList(existingProfile?.common_triggers, update.common_triggers),
         relationship_pattern_summary: update.relationship_pattern_summary,
-        mbti_tendency: update.mbti_tendency,
+        mbti_tendency: existingProfile?.mbti_source === "confirmed" ? existingProfile.mbti_tendency : update.mbti_tendency,
+        mbti_source: existingProfile?.mbti_source === "confirmed" ? "confirmed" : "inferred",
         jungian_functions: update.jungian_functions,
         closeness_score: update.closeness_score,
         health_score: update.health_score,

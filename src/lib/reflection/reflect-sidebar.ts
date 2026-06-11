@@ -1,6 +1,7 @@
 export type ReflectionSidebarRecord = {
   id: string;
   created_at: string;
+  emotion_intensity?: number;
   emotion_tags: string[];
   event_text: string;
   related_person: string | null;
@@ -75,8 +76,15 @@ export function getRecentReflectionTimeline(records: ReflectionSidebarRecord[], 
     .map((record) => ({
       ...record,
       dateLabel: `${toLocalDate(record.created_at).getMonth() + 1}月${toLocalDate(record.created_at).getDate()}日`,
-      metaLabel: `${record.emotion_tags[0] || "情绪记录"} · 强度线索`,
+      metaLabel: `${record.emotion_tags[0] || "情绪记录"} · ${
+        typeof record.emotion_intensity === "number" ? `强度等级 ${record.emotion_intensity}/10` : "强度等级待补充"
+      }`,
     }));
+}
+
+export function getRecentTimelineLabel(recordCount: number, limit = 4) {
+  if (recordCount === 0) return "还没有记录";
+  return `最近 ${Math.min(recordCount, limit)} 条记录`;
 }
 
 export function buildReflectionInsight({

@@ -8,6 +8,7 @@ create table if not exists public.reflection_records (
   title text not null,
   summary text not null,
   gentle_response text not null,
+  conversation_messages jsonb not null default '[]'::jsonb,
   emotional_root text not null,
   underlying_needs text[] not null default '{}',
   pattern text not null,
@@ -29,6 +30,7 @@ create table if not exists public.person_profiles (
   common_triggers text[] not null default '{}',
   relationship_pattern_summary text not null default '',
   mbti_tendency text not null default '',
+  mbti_source text not null default 'inferred' check (mbti_source in ('inferred', 'confirmed')),
   jungian_functions jsonb not null default '[]'::jsonb,
   closeness_score integer not null default 3 check (closeness_score between 1 and 5),
   health_score integer not null default 3 check (health_score between 1 and 5),
@@ -51,6 +53,9 @@ create table if not exists public.user_memory_profiles (
   common_triggers text[] not null default '{}',
   support_style text not null default '',
   caution_notes text[] not null default '{}',
+  mbti_type text not null default '',
+  mbti_source text not null default 'inferred' check (mbti_source in ('inferred', 'confirmed')),
+  jungian_functions jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
