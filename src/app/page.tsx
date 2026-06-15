@@ -57,15 +57,8 @@ export default async function HomePage({
 
         <aside className="flex flex-col justify-center gap-5 py-8 lg:pl-2">
           <div className="rounded-[30px] border border-[#d8d2c6] bg-[#efede4]/76 p-7 shadow-[0_22px_60px_rgba(34,31,25,0.08)]">
-            <div className="flex items-center justify-between gap-4">
+            <div>
               <p className="font-sans-soft text-sm uppercase tracking-[0.28em] text-[#9c7b35]">About Realis</p>
-              <Link
-                aria-label="Change language"
-                className="font-sans-soft text-sm uppercase tracking-[0.22em] text-[#8e836f] transition hover:text-[#2a2823]"
-                href={t(locale, "home.langHref")}
-              >
-                {t(locale, "home.langTarget")}
-              </Link>
             </div>
             <h1 className="mt-5 text-[2.8rem] font-semibold leading-tight tracking-[-0.04em]">
               {t(locale, "home.title")}

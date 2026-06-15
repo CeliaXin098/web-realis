@@ -71,6 +71,7 @@ export default function ReflectPage() {
   const [recordStatus, setRecordStatus] = useState<"loading" | "ready" | "guest">("loading");
   const draftLoadedRef = useRef(false);
   const chatAbortRef = useRef<AbortController | null>(null);
+  const finalAbortRef = useRef<AbortController | null>(null);
 
   const payload = useMemo(
     () => ({
@@ -258,21 +259,39 @@ export default function ReflectPage() {
     setSaved(false);
     setFinalLoading(true);
 
-    const response = await fetch("/api/reflect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, mode: "final" }),
-    });
+    finalAbortRef.current?.abort();
+    const controller = new AbortController();
+    finalAbortRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 90000);
 
-    const data = await response.json();
-    setFinalLoading(false);
+    try {
+      const response = await fetch("/api/reflect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, mode: "final" }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      setError(data.error || "生成失败，请稍后再试。");
-      return;
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "生成失败，请稍后再试。");
+        return;
+      }
+
+      setReflection(data);
+    } catch (requestError) {
+      setError(
+        requestError instanceof DOMException && requestError.name === "AbortError"
+          ? "生成觉察等待时间过长，请重新生成。"
+          : "生成觉察时网络连接中断，请稍后再试。",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (finalAbortRef.current === controller) {
+        finalAbortRef.current = null;
+        setFinalLoading(false);
+      }
     }
-
-    setReflection(data);
   }
 
   async function saveRecord() {
@@ -590,7 +609,7 @@ function ConversationPanel({
           </h2>
           <p className="font-sans-soft mt-3 flex items-center gap-2 text-base text-muted">
             <span className="size-2 rounded-full bg-sage" />
-            {reflection ? "已沉淀为结果" : started ? "正在对话中..." : "等待开始"}
+            {reflection ? "已生成觉察" : started ? "正在对话中..." : "等待开始"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -667,19 +686,19 @@ function ConversationPanel({
             </div>
             <div className="sticky bottom-0 flex items-center justify-between gap-3 bg-[linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,0.96)_28%)] px-4 pb-3 pt-5">
               <VoiceInputButton
-                className="size-11 min-h-11 shrink-0 px-0"
-                iconClassName="size-5"
+                className="size-[68px] min-h-[68px] min-w-[68px] shrink-0 px-0"
+                iconClassName="size-7"
                 onTranscript={onVoiceInput}
                 showText={false}
               />
               <Button
                 aria-label="发送给 AI"
-                className="size-11 min-h-11 rounded-full px-0"
+                className="size-[68px] min-h-[68px] min-w-[68px] shrink-0 rounded-full px-0"
                 disabled={chatLoading || !chatInput.trim()}
                 onClick={onSend}
                 type="button"
               >
-                {chatLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {chatLoading ? <Loader2 className="size-6 animate-spin" /> : <Send className="size-6" />}
               </Button>
             </div>
           </div>
@@ -693,7 +712,7 @@ function ConversationPanel({
               variant="secondary"
             >
               {finalLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {finalLoading ? "正在整理觉察信..." : "沉淀为结果"}
+              {finalLoading ? "正在生成觉察..." : "生成觉察"}
             </Button>
           ) : null}
         </div>

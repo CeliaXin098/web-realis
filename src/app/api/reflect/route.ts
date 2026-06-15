@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       ],
       response_format: { type: "json_object" },
       temperature: 0.4,
-      max_tokens: 5000,
+      max_tokens: 3800,
     });
 
     if (isCompletionTruncated(completion.choices[0]?.finish_reason)) {

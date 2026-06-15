@@ -6,7 +6,7 @@ test("home opens and shows primary navigation", async ({ page }) => {
   await expect(page.getByRole("link", { name: /AI觉察/ }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /记忆画廊/ }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /人际罗盘/ }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Change language" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Change language" })).toHaveCount(0);
 });
 
 test("home song card does not play mismatched placeholder audio when no source is available", async ({ page }) => {
@@ -103,8 +103,27 @@ test("home song card does not play mismatched placeholder audio when no source i
     .toBeNull();
 
   await frontCard.click();
-  await expect(page.getByTestId("home-audio-status")).toContainText("暂时不能播放");
+  await expect(page.getByTestId("home-audio-status")).toContainText("暂时都无法播放");
   await expect(frontCard).toHaveAttribute("aria-pressed", "false");
+});
+
+test("bringing a playable music card forward starts looping playback", async ({ page }) => {
+  await page.addInitScript(() => {
+    HTMLMediaElement.prototype.play = function () {
+      this.dispatchEvent(new Event("play"));
+      return Promise.resolve();
+    };
+    HTMLMediaElement.prototype.pause = function () {
+      this.dispatchEvent(new Event("pause"));
+    };
+  });
+
+  await page.goto("/");
+  const queuedCard = page.getByRole("button", { name: /切换到/ }).first();
+  await queuedCard.click({ force: true });
+
+  await expect(page.getByTestId("home-audio")).toHaveAttribute("loop", "");
+  await expect(page.getByTestId("home-front-card")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("unauthenticated /generate redirects to login", async ({ page }) => {
@@ -137,7 +156,7 @@ test("AI reflection discusses, generates a letter, and can save to gallery", asy
   await expect(page.getByLabel("继续和 AI 说")).toHaveValue("今天会议里，我准备很久的方案被很快跳过了。");
   await page.getByRole("button", { name: "发送给 AI" }).click();
   await expect(page.getByText(/我听见你在这件事里很委屈/)).toBeVisible();
-  await page.getByRole("button", { name: "沉淀为结果" }).click();
+  await page.getByRole("button", { name: "生成觉察" }).click();
   await expect(page.getByRole("heading", { name: "会议里被跳过的方案" })).toBeVisible();
   await expect(page.getByRole("button", { name: "开始新一轮觉察" })).toBeVisible();
 
@@ -150,20 +169,30 @@ test("AI reflection discusses, generates a letter, and can save to gallery", asy
   await page.goto("/gallery");
   await page.getByRole("button", { name: /会议里被跳过的方案/ }).click();
   await expect(page.getByText("今天会议里，我准备很久的方案被很快跳过了。").first()).toBeVisible();
-  await expect(page.getByTestId("gallery-left-summary").getByText("AI 觉察总结")).toBeVisible();
-  await expect(page.getByTestId("gallery-left-conversation").getByText("与 AI 的对话回看")).toBeVisible();
+  await expect(page.getByTestId("gallery-active-artwork").getByText("AI 觉察总结")).toBeVisible();
+  await expect(page.getByTestId("gallery-active-artwork").getByText(/这次刺痛可能不只是方案被跳过/)).toBeVisible();
+  await expect(page.getByTestId("gallery-left-summary")).toHaveCount(0);
+  await expect(page.getByTestId("gallery-left-conversation")).toHaveAttribute("data-surface", "pressed-botanical-letter");
+  await expect(page.getByTestId("gallery-left-conversation").locator('[data-decoration="paper-tape"]')).toHaveCount(2);
+  await expect(page.getByTestId("gallery-left-conversation").locator('[data-decoration="paper-creases"]')).toHaveCount(1);
+  await expect(page.getByTestId("gallery-left-conversation").getByText("ABOUT THIS MEMORY")).toHaveCount(0);
+  await expect(page.getByTestId("gallery-left-conversation").getByText("与 AI 的对话回看")).toHaveCount(0);
+  await expect(page.getByTestId("gallery-left-conversation").getByText("回到当时被听见的片刻")).toHaveCount(0);
+  await expect(page.getByTestId("gallery-left-conversation").getByText("我写下").first()).toBeVisible();
+  await expect(page.getByTestId("gallery-left-conversation").getByText("AI 回信").first()).toBeVisible();
   await expect
     .poll(async () => {
-      const [summary, conversation] = await Promise.all([
-        page.getByTestId("gallery-left-summary").boundingBox(),
+      const [artwork, conversation] = await Promise.all([
+        page.getByTestId("gallery-active-artwork").boundingBox(),
         page.getByTestId("gallery-left-conversation").boundingBox(),
       ]);
       return {
-        leftDelta: Math.abs((summary?.x || 0) - (conversation?.x || 0)),
-        widthDelta: Math.abs((summary?.width || 0) - (conversation?.width || 0)),
+        hasBreathingRoom: (conversation?.y || 0) - ((artwork?.y || 0) + (artwork?.height || 0)) >= 80,
+        isAligned: Math.abs((artwork?.x || 0) - (conversation?.x || 0)) < 1,
+        isSameWidth: Math.abs((artwork?.width || 0) - (conversation?.width || 0)) < 1,
       };
     })
-    .toEqual({ leftDelta: 0, widthDelta: 0 });
+    .toEqual({ hasBreathingRoom: true, isAligned: true, isSameWidth: true });
   await expect(page.getByTestId("gallery-detail-panel").getByText("AI 觉察总结")).toHaveCount(0);
   await expect(page.getByTestId("gallery-detail-panel").getByText("与 AI 的对话回看")).toHaveCount(0);
   await expect(page.getByText("强度等级 5/10")).toBeVisible();
@@ -199,6 +228,15 @@ test("middle conversation composer grows and then scrolls while keeping actions 
     .toBe(true);
   await expect(page.getByRole("button", { name: "语音输入" }).last()).toBeVisible();
   await expect(page.getByRole("button", { name: "发送给 AI" })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const [voice, send] = await Promise.all([
+        page.getByRole("button", { name: "语音输入" }).last().boundingBox(),
+        page.getByRole("button", { name: "发送给 AI" }).boundingBox(),
+      ]);
+      return Math.min(voice?.width || 0, voice?.height || 0, send?.width || 0, send?.height || 0);
+    })
+    .toBeGreaterThanOrEqual(52);
 });
 
 test("memory gallery and relationship compass render in E2E mode", async ({ page }) => {

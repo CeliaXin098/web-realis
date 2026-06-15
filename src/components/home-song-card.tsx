@@ -96,17 +96,26 @@ export function HomeSongCard() {
       body: JSON.stringify({ activeTrackId: deck.activeTrackId, action, selectedTrackId }),
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) return null;
 
     const nextDeck = (await response.json()) as HomeSongDeck;
-    setDeck(nextDeck);
-    return true;
+    return nextDeck;
   }
 
   async function bringForward(selectedTrackId?: string, action: HomeSongDeckAction = "next") {
-    const ok = await requestDeck(selectedTrackId ? "select" : action, selectedTrackId);
-    if (!ok) {
-      setDeck((current) => rotateFallbackDeck(current, selectedTrackId, action));
+    playIntentRef.current = true;
+    const requestedDeck = await requestDeck(selectedTrackId ? "select" : action, selectedTrackId);
+    const nextDeck = requestedDeck || rotateFallbackDeck(deck, selectedTrackId, action);
+    const playableDeck = bringNextPlayableTrackForward(nextDeck);
+
+    if (playableDeck) {
+      setAudioNotice("");
+      setDeck(playableDeck);
+    } else {
+      playIntentRef.current = false;
+      setIsPlaying(false);
+      setAudioNotice("当前三首歌暂时都无法播放，稍后会为你重新尝试。");
+      setDeck(nextDeck);
     }
     setDragX(0);
     setDragY(0);
@@ -120,9 +129,17 @@ export function HomeSongCard() {
       return;
     }
 
+    const nextDeck = bringNextPlayableTrackForward(rotateFallbackDeck(deck, undefined, "next"));
+    if (nextDeck) {
+      playIntentRef.current = true;
+      setAudioNotice("刚才的歌曲暂时无法播放，已为你换到下一首。");
+      setDeck(nextDeck);
+      return;
+    }
+
     playIntentRef.current = false;
     setIsPlaying(false);
-    setAudioNotice("这首歌暂时不能播放，但这张卡片还会在这里陪你。");
+    setAudioNotice("当前三首歌暂时都无法播放，稍后会为你重新尝试。");
   }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
@@ -172,7 +189,7 @@ export function HomeSongCard() {
 
     const audio = audioRef.current;
     if (!audio || !currentAudioUrl) {
-      setAudioNotice("这首歌暂时不能播放，但这张卡片还会在这里陪你。");
+      await bringForward();
       return;
     }
 
@@ -217,6 +234,7 @@ export function HomeSongCard() {
         onPlay={() => setIsPlaying(true)}
         preload="none"
         ref={audioRef}
+        loop
         src={currentAudioUrl || undefined}
       />
       {deck.cards.map((card, offset) => {
@@ -295,6 +313,15 @@ function rotateFallbackDeck(deck: HomeSongDeck, selectedTrackId?: string, action
   }
 
   const cards = [...deck.cards.slice(1), deck.cards[0]];
+  return { activeTrackId: cards[0].track.id, cards };
+}
+
+function bringNextPlayableTrackForward(deck: HomeSongDeck) {
+  const playableIndex = deck.cards.findIndex((card) => Boolean(card.track.audioUrl || card.track.fallbackAudioUrl));
+  if (playableIndex < 0) return null;
+  if (playableIndex === 0) return deck;
+
+  const cards = [...deck.cards.slice(playableIndex), ...deck.cards.slice(0, playableIndex)];
   return { activeTrackId: cards[0].track.id, cards };
 }
 

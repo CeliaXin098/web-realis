@@ -1,6 +1,7 @@
-import { Compass, GalleryVerticalEnd, PenLine, Sparkles } from "lucide-react";
+import { Compass, GalleryVerticalEnd, PenLine, Sparkles, UserRound } from "lucide-react";
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 const links = [
   { href: "/", label: "首页" },
@@ -9,7 +10,21 @@ const links = [
   { href: "/compass", label: "人际罗盘", icon: Compass },
 ];
 
-export function Navigation() {
+export async function Navigation() {
+  let currentUser: { email?: string | null; user_metadata?: Record<string, unknown> | null } | null = null;
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      currentUser = user;
+    } catch {
+      currentUser = null;
+    }
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-line/70 bg-porcelain/86 backdrop-blur-2xl">
       <nav className="grid min-h-[94px] w-full grid-cols-[1fr_auto_1fr] items-center gap-5 px-5 py-4 sm:px-9 lg:px-14">
@@ -40,16 +55,9 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center gap-3 justify-self-end">
-          <Link
-            aria-label="Change language"
-            className="font-sans-soft hidden text-lg text-muted hover:text-ink sm:inline"
-            href="/?lang=en"
-          >
-            EN
-          </Link>
-          <ButtonLink className="min-h-12 px-6 text-lg" href="/auth" variant="secondary">
-            <Sparkles className="size-4" />
-            登录
+          <ButtonLink className="min-h-12 max-w-[220px] px-6 text-lg" href={currentUser ? "/reflect" : "/auth"} variant="secondary">
+            {currentUser ? <UserRound className="size-5 shrink-0" /> : <Sparkles className="size-4 shrink-0" />}
+            <span className="truncate">{currentUser ? "已登录" : "登录"}</span>
           </ButtonLink>
         </div>
       </nav>

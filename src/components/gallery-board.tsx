@@ -3,7 +3,6 @@
 import { CalendarDays, ChevronDown, ChevronUp, Film, GalleryVerticalEnd, Heart, Music, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReflectionRecord } from "@/lib/records/types";
-import { getGalleryRecordExcerpt } from "@/lib/records/gallery";
 import { cn } from "@/lib/utils";
 
 const memoryPhotos = [
@@ -130,8 +129,7 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
             </div>
           </div>
 
-          <div className="relative left-1/2 z-30 mt-5 w-full max-w-[648px] -translate-x-1/2 space-y-5 lg:left-[28%]">
-            <SummaryReviewCard record={activeRecord} />
+          <div className="relative left-1/2 z-30 mt-10 w-full max-w-[648px] -translate-x-1/2 lg:left-[28%] lg:w-[648px] lg:max-w-none">
             <ConversationReviewCard record={activeRecord} />
           </div>
         </div>
@@ -173,10 +171,12 @@ function VerticalMemoryCard({
 
   return (
     <button
+      aria-label={record.title}
       className={cn(
         "group absolute left-1/2 top-1/2 overflow-hidden rounded-[34px] bg-stone-200 text-left text-white outline-none transition-all duration-700 ease-out focus-visible:ring-4 focus-visible:ring-gold/40",
         active ? "shadow-[0_38px_110px_rgba(84,65,44,0.32)] ring-2 ring-white/85" : "shadow-[0_18px_52px_rgba(84,65,44,0.18)]",
       )}
+      data-testid={active ? "gallery-active-artwork" : undefined}
       onClick={onSelect}
       style={{
         height: active ? (isTall ? 570 : 462) : isTall ? 340 : 260,
@@ -212,14 +212,20 @@ function VerticalMemoryCard({
         </label>
       ) : null}
       <span className="absolute bottom-8 left-8 right-8 text-white">
-        <span className="block line-clamp-2 text-4xl font-semibold leading-tight tracking-[-0.045em] text-white drop-shadow">
-          {record.title}
-        </span>
         {active ? (
-          <span className="mt-4 block line-clamp-3 font-sans-soft text-lg leading-8 text-white/90 drop-shadow">
-            {getGalleryRecordExcerpt(record)}
+          <>
+            <span className="font-sans-soft block text-sm font-semibold tracking-[0.16em] text-[#f4dfbd] drop-shadow">
+              AI 觉察总结
+            </span>
+            <span className="mt-4 block line-clamp-5 text-2xl font-semibold leading-[1.55] tracking-[-0.025em] text-white drop-shadow">
+              {record.summary}
+            </span>
+          </>
+        ) : (
+          <span className="block line-clamp-2 text-4xl font-semibold leading-tight tracking-[-0.045em] text-white drop-shadow">
+            {record.title}
           </span>
-        ) : null}
+        )}
       </span>
     </button>
   );
@@ -320,58 +326,50 @@ function ReasonNote({
 }
 
 function ConversationReviewCard({ record }: { record: ReflectionRecord }) {
+  const paperClassName =
+    "relative w-full bg-[#e8e2d5] bg-[radial-gradient(ellipse_at_18%_24%,rgba(126,145,113,0.17),transparent_22%),radial-gradient(ellipse_at_82%_72%,rgba(151,125,91,0.13),transparent_24%),linear-gradient(118deg,transparent_0%,rgba(255,255,255,0.22)_18%,transparent_34%,rgba(100,89,72,0.08)_48%,transparent_63%,rgba(255,255,255,0.24)_79%,transparent_100%),linear-gradient(25deg,#e5ded0,#f0ebdf_48%,#ddd4c4)] px-10 py-9 shadow-[0_24px_50px_rgba(65,55,41,0.18)]";
+  const paperDecorations = (
+    <>
+      <span
+        className="pointer-events-none absolute -left-4 -top-3 h-8 w-24 -rotate-[34deg] bg-[#ddd096]/90 shadow-sm"
+        data-decoration="paper-tape"
+      />
+      <span
+        className="pointer-events-none absolute -bottom-3 -right-4 h-8 w-24 -rotate-[31deg] bg-[#c99858]/85 shadow-sm"
+        data-decoration="paper-tape"
+      />
+      <span className="pointer-events-none absolute bottom-8 left-5 h-40 w-20 -rotate-12 rounded-[60%_20%_55%_30%] bg-sage/10 blur-[1px]" />
+      <span className="pointer-events-none absolute right-7 top-24 h-44 w-24 rotate-12 rounded-[30%_70%_25%_60%] bg-clay/8 blur-[2px]" />
+      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(91deg,transparent_0%,rgba(255,255,255,0.14)_22%,rgba(94,80,63,0.05)_22.5%,transparent_44%,rgba(255,255,255,0.16)_68%,rgba(94,80,63,0.05)_69%,transparent_100%)]" />
+      <span
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(132deg,transparent_0%,transparent_18%,rgba(255,255,255,0.28)_18.5%,rgba(91,74,55,0.10)_19.2%,transparent_20%,transparent_47%,rgba(255,255,255,0.24)_47.7%,rgba(91,74,55,0.09)_48.5%,transparent_49.4%,transparent_100%),linear-gradient(42deg,transparent_0%,transparent_31%,rgba(91,74,55,0.08)_31.6%,rgba(255,255,255,0.22)_32.3%,transparent_33%,transparent_69%,rgba(91,74,55,0.08)_69.6%,rgba(255,255,255,0.24)_70.3%,transparent_71%,transparent_100%),linear-gradient(96deg,transparent_0%,transparent_54%,rgba(255,255,255,0.22)_54.6%,rgba(91,74,55,0.08)_55.3%,transparent_56%,transparent_100%)] mix-blend-multiply"
+        data-decoration="paper-creases"
+      />
+    </>
+  );
+
   if (!record.conversation_messages?.length) {
     return (
-      <article
-        className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
-        data-testid="gallery-left-conversation"
-      >
-        <h3 className="font-sans-soft text-2xl font-semibold text-sage">与 AI 的对话回看</h3>
-        <p className="font-sans-soft mt-4 text-sm leading-7 text-muted">这条记忆没有保存对话内容。</p>
+      <article className={paperClassName} data-surface="pressed-botanical-letter" data-testid="gallery-left-conversation">
+        {paperDecorations}
+        <p className="font-sans-soft relative py-12 text-center text-sm leading-8 text-muted">这条记忆没有保存对话内容。</p>
       </article>
     );
   }
 
   return (
-    <article
-      className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
-      data-testid="gallery-left-conversation"
-    >
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h3 className="font-sans-soft text-2xl font-semibold text-sage">与 AI 的对话回看</h3>
-          <p className="font-sans-soft mt-2 text-sm text-muted">回到当时被听见的片刻</p>
-        </div>
-        <span className="font-sans-soft rounded-full bg-[#eee7dc] px-3 py-1 text-xs text-muted">
-          {record.conversation_messages.length} 条
-        </span>
-      </div>
-      <div className="mt-5 max-h-72 space-y-3 overflow-y-auto pr-2">
+    <article className={paperClassName} data-surface="pressed-botanical-letter" data-testid="gallery-left-conversation">
+      {paperDecorations}
+      <div className="relative mx-auto max-h-72 max-w-[520px] overflow-y-auto px-3 pr-5 text-center">
         {record.conversation_messages.map((message, index) => (
-          <p
-            className={cn(
-              "rounded-2xl px-4 py-3 text-sm leading-7",
-              message.role === "user" ? "ml-7 bg-[#e8dfd3] text-ink" : "mr-7 bg-white/78 text-muted",
-            )}
-            key={`${message.role}-${index}`}
-          >
-            {message.content}
-          </p>
+          <div className="py-4" key={`${message.role}-${index}`}>
+            <span className="font-sans-soft text-[11px] font-semibold tracking-[0.18em] text-clay">
+              {message.role === "user" ? "我写下" : "AI 回信"}
+            </span>
+            <p className={cn("mt-2 text-sm leading-8", message.role === "user" ? "text-ink" : "text-muted")}>{message.content}</p>
+          </div>
         ))}
       </div>
-    </article>
-  );
-}
-
-function SummaryReviewCard({ record }: { record: ReflectionRecord }) {
-  return (
-    <article
-      className="w-full rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef]/94 p-6 shadow-[0_18px_52px_rgba(84,65,44,0.10)]"
-      data-testid="gallery-left-summary"
-    >
-      <p className="font-sans-soft text-sm font-medium tracking-[0.08em] text-clay">AI 觉察总结</p>
-      <h3 className="mt-3 text-2xl font-semibold leading-tight text-ink">{record.title}</h3>
-      <p className="mt-4 text-base leading-8 text-muted">{record.summary}</p>
     </article>
   );
 }
