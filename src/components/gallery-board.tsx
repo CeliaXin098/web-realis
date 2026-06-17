@@ -1,7 +1,11 @@
-﻿"use client";
+"use client";
 
-import { CalendarDays, ChevronDown, ChevronUp, Film, GalleryVerticalEnd, Heart, Music, Sparkles } from "lucide-react";
+import { Html, Float, PerspectiveCamera } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { motion } from "framer-motion";
+import { ImagePlus, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import type { ReflectionRecord } from "@/lib/records/types";
 import { cn } from "@/lib/utils";
 
@@ -12,37 +16,40 @@ const memoryPhotos = [
   "/memory-gallery/night-balloons.jpg",
 ];
 
-type MemoryPosition = {
-  opacity: string;
-  scale: string;
-  translateY: string;
-  width: string;
-  zIndex: number;
+const radius = 3.2;
+const depthGap = 1.1;
+
+type MemoryItem = {
+  instanceId: string;
+  sourceId: string;
+  record: ReflectionRecord;
+  index: number;
 };
 
-const desktopPositions: Record<number, MemoryPosition> = {
-  "-3": { opacity: "0.14", scale: "0.58", translateY: "-548px", width: "340px", zIndex: 1 },
-  "-2": { opacity: "0.32", scale: "0.7", translateY: "-382px", width: "420px", zIndex: 2 },
-  "-1": { opacity: "0.64", scale: "0.84", translateY: "-206px", width: "520px", zIndex: 3 },
-  "0": { opacity: "1", scale: "1", translateY: "0px", width: "648px", zIndex: 5 },
-  "1": { opacity: "0.64", scale: "0.84", translateY: "228px", width: "520px", zIndex: 3 },
-  "2": { opacity: "0.32", scale: "0.7", translateY: "418px", width: "420px", zIndex: 2 },
-  "3": { opacity: "0.14", scale: "0.58", translateY: "578px", width: "340px", zIndex: 1 },
+type MemoryPoint = MemoryItem & {
+  position: THREE.Vector3;
+};
+
+type SelectedMemory = {
+  coverImage: string;
+  record: ReflectionRecord;
 };
 
 export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [customCovers, setCustomCovers] = useState<Record<string, string>>({});
-  const activeRecord = records[activeIndex] || records[0];
   const customCoverUrls = useRef<string[]>([]);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [customCovers, setCustomCovers] = useState<Record<string, string>>({});
+  const [selectedMemory, setSelectedMemory] = useState<SelectedMemory | null>(null);
+  const reducedMotion = useReducedMotion();
 
-  const visibleMemories = useMemo(
-    () =>
-      records
-        .map((record, index) => ({ record, index, offset: getShortestOffset(index, activeIndex, records.length) }))
-        .filter((item) => Math.abs(item.offset) <= 3),
-    [activeIndex, records],
-  );
+  const memories = useMemo(() => buildMemoryItems(records), [records]);
+  const timelineIndex = getDwelledTimelineIndex(scrollProgress, memories.length);
+  const activeIndex = Math.min(memories.length - 1, Math.max(0, Math.round(timelineIndex)));
+
+  useEffect(() => {
+    document.body.classList.add("gallery-dark");
+    return () => document.body.classList.remove("gallery-dark");
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -50,17 +57,8 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
     };
   }, []);
 
-  function move(step: number) {
-    setActiveIndex((current) => (current + step + records.length) % records.length);
-  }
-
-  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
-    move(event.deltaY > 0 ? 1 : -1);
-  }
-
-  function resolveCover(record: ReflectionRecord, index: number) {
-    return record.cover_image_url || customCovers[record.id] || memoryPhotos[index % memoryPhotos.length];
+  function resolveCover(memory: MemoryItem) {
+    return memory.record.cover_image_url || customCovers[memory.sourceId] || memoryPhotos[memory.index % memoryPhotos.length];
   }
 
   function handleCoverUpload(recordId: string, file?: File) {
@@ -74,342 +72,425 @@ export function GalleryBoard({ records }: { records: ReflectionRecord[] }) {
     });
   }
 
+  function handleFrameWheel(event: React.WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? 1 : -1;
+    const step = Math.min(0.08, Math.max(0.018, Math.abs(event.deltaY) / 3600));
+    setScrollProgress((current) => Math.min(1, Math.max(0, current + direction * step)));
+  }
+
   return (
-    <section className="relative left-1/2 -mt-4 min-h-[1300px] w-screen -translate-x-1/2 overflow-visible px-6 sm:px-10">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(circle_at_18%_38%,rgba(255,255,255,0.72),rgba(236,226,208,0.22)_38%,transparent_68%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[linear-gradient(90deg,rgba(108,90,64,0.04)_1px,transparent_1px),linear-gradient(180deg,rgba(108,90,64,0.03)_1px,transparent_1px)] bg-[size:92px_92px] opacity-55" />
+    <section className="relative grid min-h-[calc(100dvh-100px)] w-full place-items-center overflow-hidden bg-[#05080d] px-6 py-6 text-slate-100">
+      <OpeningFlash disabled={reducedMotion} />
+      <div
+        className="relative h-[82vh] max-h-[820px] min-h-[520px] w-[90vw] max-w-[1680px] overflow-hidden rounded-[34px] border border-white/[0.10] bg-[#05080d] shadow-[0_0_110px_rgba(55,94,145,0.16)]"
+        onWheel={handleFrameWheel}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_60%_45%,rgba(96,137,172,0.18),transparent_30%),radial-gradient(circle_at_26%_70%,rgba(36,58,82,0.20),transparent_38%),linear-gradient(180deg,#030508_0%,#07101a_54%,#04070d_100%)]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:38px_38px]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-soft-light [background-image:radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.7)_0_1px,transparent_1px),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.55)_0_1px,transparent_1px)] [background-size:5px_5px,7px_7px]" />
 
-      <div className="relative mx-auto grid min-h-[1300px] max-w-[1720px] gap-14 lg:grid-cols-[0.66fr_1.34fr] xl:grid-cols-[0.62fr_1.38fr]">
-        <div className="relative min-h-[1260px] overflow-visible">
-          <div className="relative z-30 -ml-20 flex max-w-[960px] items-start gap-7">
-            <div className="flex shrink-0 items-center gap-5 rounded-[32px] border border-line/70 bg-[#faf7ef]/82 p-6 shadow-[0_16px_44px_rgba(84,65,44,0.07)] backdrop-blur">
-              <span className="grid size-16 place-items-center rounded-[22px] bg-moss text-white shadow-lg shadow-moss/20">
-                <GalleryVerticalEnd className="size-7" />
-              </span>
-              <div>
-                <p className="font-sans-soft text-3xl font-semibold text-ink">记忆馆藏</p>
-                <p className="mt-3 text-6xl font-semibold text-ink">{records.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative mt-4 h-[700px] overflow-visible" onWheel={handleWheel}>
-            <div className="absolute left-[28%] top-1/2 h-[700px] w-[760px] -translate-x-1/2 -translate-y-1/2 overflow-visible">
-              {visibleMemories.map(({ record, index, offset }) => (
-                <VerticalMemoryCard
-                  active={offset === 0}
-                  coverImage={resolveCover(record, index)}
-                  index={index}
-                  key={record.id}
-                  offset={offset}
-                  onCoverUpload={(file) => handleCoverUpload(record.id, file)}
-                  onSelect={() => setActiveIndex(index)}
-                  record={record}
-                />
-              ))}
-            </div>
-
-            <div className="absolute bottom-0 left-[28%] z-30 flex -translate-x-1/2 items-center gap-3">
-              <button
-                aria-label="上一条记忆"
-                className="grid size-12 place-items-center rounded-full border border-line bg-white/82 text-muted shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:text-ink"
-                onClick={() => move(-1)}
-                type="button"
-              >
-                <ChevronUp className="size-5" />
-              </button>
-              <button
-                aria-label="下一条记忆"
-                className="grid size-12 place-items-center rounded-full border border-line bg-white/82 text-muted shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:text-ink"
-                onClick={() => move(1)}
-                type="button"
-              >
-                <ChevronDown className="size-5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="relative left-1/2 z-30 mt-10 w-full max-w-[648px] -translate-x-1/2 lg:left-[28%] lg:w-[648px] lg:max-w-none">
-            <ConversationReviewCard record={activeRecord} />
-          </div>
+        <div className="absolute inset-0 z-10">
+          <Canvas dpr={[1, 1.8]} gl={{ alpha: true, antialias: true }} shadows>
+            <PerspectiveCamera makeDefault fov={46} position={[0, 0, 7]} />
+            <color args={["#05080d"]} attach="background" />
+            <fog attach="fog" args={["#05080d", 8, 38]} />
+            <ambientLight intensity={0.72} />
+            <pointLight color="#93c5fd" intensity={38} position={[0, 2.8, 2]} />
+            <pointLight color="#f5d6a4" intensity={8} position={[-5, -3, -8]} />
+            {!reducedMotion ? <ParticleField /> : null}
+            <MemoryHelix
+              activeIndex={activeIndex}
+              timelineIndex={timelineIndex}
+              memories={memories}
+              onCardSelect={(record, coverImage) => setSelectedMemory({ coverImage, record })}
+              onCoverUpload={handleCoverUpload}
+              reducedMotion={reducedMotion}
+              resolveCover={resolveCover}
+              scrollProgress={scrollProgress}
+            />
+          </Canvas>
         </div>
 
-        <MemoryDetailPanel record={activeRecord} />
+        <div className="pointer-events-none absolute bottom-5 left-1/2 z-20 -translate-x-1/2 font-sans-soft text-[10px] uppercase tracking-[0.34em] text-slate-500">
+          Scroll to dive
+        </div>
+        <div className="pointer-events-none absolute bottom-7 right-6 top-7 z-20 w-px rounded-full bg-white/10">
+          <div
+            className="absolute left-1/2 h-16 w-1.5 -translate-x-1/2 rounded-full bg-sky-200/55 shadow-[0_0_18px_rgba(147,197,253,0.45)] transition-transform duration-200"
+            style={{ top: `calc(${scrollProgress * 100}% - ${scrollProgress * 64}px)` }}
+          />
+        </div>
       </div>
+      {selectedMemory ? <MemorySummaryDialog memory={selectedMemory} onClose={() => setSelectedMemory(null)} /> : null}
     </section>
   );
 }
 
-function getShortestOffset(index: number, activeIndex: number, total: number) {
-  let offset = index - activeIndex;
-  if (offset > total / 2) offset -= total;
-  if (offset < -total / 2) offset += total;
-  return offset;
-}
-
-function VerticalMemoryCard({
-  active,
-  coverImage,
-  index,
-  offset,
+function MemoryHelix({
+  activeIndex,
+  timelineIndex,
+  memories,
+  onCardSelect,
   onCoverUpload,
-  onSelect,
-  record,
+  reducedMotion,
+  resolveCover,
+  scrollProgress,
 }: {
-  active: boolean;
-  coverImage: string;
-  index: number;
-  offset: number;
-  onCoverUpload: (file?: File) => void;
-  onSelect: () => void;
-  record: ReflectionRecord;
+  activeIndex: number;
+  timelineIndex: number;
+  memories: MemoryItem[];
+  onCardSelect: (record: ReflectionRecord, coverImage: string) => void;
+  onCoverUpload: (recordId: string, file?: File) => void;
+  reducedMotion: boolean;
+  resolveCover: (memory: MemoryItem) => string;
+  scrollProgress: number;
 }) {
-  const position = desktopPositions[offset] || desktopPositions[0];
-  const isTall = index % 3 === 1;
-  const dateLabel = new Date(record.created_at).toLocaleDateString("zh-CN");
-  const personLabel = record.related_person || "只与我有关";
+  const points = useMemo<MemoryPoint[]>(
+    () =>
+      memories.map((memory, index) => {
+        const angle = index * 0.75;
+        return {
+          ...memory,
+          position: new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * 1.2, -index * depthGap),
+        };
+      }),
+    [memories],
+  );
 
   return (
-    <button
-      aria-label={record.title}
-      className={cn(
-        "group absolute left-1/2 top-1/2 overflow-hidden rounded-[34px] bg-stone-200 text-left text-white outline-none transition-all duration-700 ease-out focus-visible:ring-4 focus-visible:ring-gold/40",
-        active ? "shadow-[0_38px_110px_rgba(84,65,44,0.32)] ring-2 ring-white/85" : "shadow-[0_18px_52px_rgba(84,65,44,0.18)]",
-      )}
-      data-testid={active ? "gallery-active-artwork" : undefined}
-      onClick={onSelect}
-      style={{
-        height: active ? (isTall ? 570 : 462) : isTall ? 340 : 260,
-        opacity: position.opacity,
-        transform: `translate(-50%, calc(-50% + ${position.translateY})) scale(${position.scale})`,
-        width: position.width,
-        zIndex: position.zIndex,
-      }}
-      type="button"
-    >
-      <span
-        className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-105"
-        style={{ backgroundImage: `url(${coverImage})` }}
-      />
-      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,10,8,0.12),rgba(6,10,8,0.1)_30%,rgba(6,10,8,0.7)_100%)]" />
-      <span className="absolute inset-0 bg-[radial-gradient(circle_at_35%_18%,rgba(255,255,255,0.26),transparent_24%)]" />
-      <span className="absolute left-8 top-7 flex flex-wrap gap-2 font-sans-soft text-sm font-medium text-white drop-shadow">
-        <span className="rounded-full bg-black/20 px-3 py-1 backdrop-blur-sm">{dateLabel}</span>
-        <span className="rounded-full bg-black/20 px-3 py-1 backdrop-blur-sm">{personLabel}</span>
-      </span>
-      {active ? (
-        <label
-          className="font-sans-soft absolute right-7 top-7 cursor-pointer rounded-full bg-white/18 px-3 py-1 text-sm font-medium text-white opacity-0 backdrop-blur-sm transition group-hover:opacity-100"
-          onClick={(event) => event.stopPropagation()}
-        >
-          更换封面
-          <input
-            accept="image/*"
-            className="sr-only"
-            onChange={(event) => onCoverUpload(event.target.files?.[0])}
-            type="file"
-          />
-        </label>
-      ) : null}
-      <span className="absolute bottom-8 left-8 right-8 text-white">
-        {active ? (
-          <>
-            <span className="font-sans-soft block text-sm font-semibold tracking-[0.16em] text-[#f4dfbd] drop-shadow">
-              AI 觉察总结
-            </span>
-            <span className="mt-4 block line-clamp-5 text-2xl font-semibold leading-[1.55] tracking-[-0.025em] text-white drop-shadow">
-              {record.summary}
-            </span>
-          </>
-        ) : (
-          <span className="block line-clamp-2 text-4xl font-semibold leading-tight tracking-[-0.045em] text-white drop-shadow">
-            {record.title}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
-
-function MemoryDetailPanel({ record }: { record: ReflectionRecord }) {
-  const reasoningNotes = record.reasoning_notes;
-
-  return (
-    <aside className="relative mt-10 min-h-[900px] overflow-visible py-2 lg:pr-6" data-testid="gallery-detail-panel">
-      <div className="pointer-events-none absolute right-0 top-8 h-56 w-56 rounded-full bg-gold/14 blur-3xl" />
-      <div className="relative min-h-[860px] rounded-[34px] border border-[#d8c9b3] bg-[#f3f0e8]/96 p-6 shadow-[0_24px_76px_rgba(84,65,44,0.14)] backdrop-blur">
-        <div className="grid items-start gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <header className="rounded-[30px] border border-[#d8c9b3] bg-[#faf7ef] p-6 shadow-[0_16px_44px_rgba(84,65,44,0.07)]">
-            <p className="font-sans-soft text-2xl font-semibold tracking-[0.08em] text-clay">当前记忆</p>
-            <time className="font-sans-soft mt-5 flex items-center gap-2 text-lg text-muted">
-              <CalendarDays className="size-5" />
-              {new Date(record.created_at).toLocaleDateString("zh-CN")}
-            </time>
-            <h2 className="text-balance mt-5 text-[3.5rem] font-semibold leading-tight tracking-[-0.045em] text-ink xl:text-[4rem]">
-              {record.title}
-            </h2>
-          </header>
-
-          <InfoCard title="当时记录">
-            <p className="text-xl leading-9 text-ink">{record.event_text}</p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {record.emotion_tags.map((tag) => (
-                <span className="font-sans-soft rounded-full bg-sage/12 px-3 py-1 text-base font-medium text-moss" key={tag}>
-                  {tag}
-                </span>
-              ))}
-              <span className="font-sans-soft rounded-full bg-gold/14 px-3 py-1 text-base font-medium text-[#7b6330]">
-                强度等级 {record.emotion_intensity}/10
-              </span>
-              {record.related_person ? (
-                <span className="font-sans-soft rounded-full bg-clay/12 px-3 py-1 text-base font-medium text-clay">
-                  {record.related_person}
-                </span>
-              ) : null}
-            </div>
-          </InfoCard>
-        </div>
-
-        <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <InfoCard basis={reasoningNotes?.emotional_root_basis} title="深层原因">
-            {record.emotional_root}
-          </InfoCard>
-          <InfoCard basis={reasoningNotes?.pattern_basis} title="模式线索">
-            {record.pattern}
-          </InfoCard>
-          <InfoCard title="给未来的自己">
-            <Sparkles className="mb-3 size-6 text-[#9a7331]" />
-            {record.future_self_note}
-            <ReasonNote basis={reasoningNotes?.future_self_note_basis} fallback="这条旧记录没有保存给未来自己的推断依据。" />
-          </InfoCard>
-        </div>
-
-        <div className="mt-6 grid gap-6 xl:grid-cols-3">
-          <Prescription
-            icon={<Film className="size-6" />}
-            items={record.prescriptions.film}
-            reasons={reasoningNotes?.prescription_reasons.film || []}
-            title="电影"
-          />
-          <Prescription
-            icon={<Music className="size-6" />}
-            items={record.prescriptions.music}
-            reasons={reasoningNotes?.prescription_reasons.music || []}
-            title="音乐"
-          />
-          <Prescription
-            icon={<Heart className="size-6" />}
-            items={record.prescriptions.action}
-            reasons={reasoningNotes?.prescription_reasons.action || []}
-            title="行动"
-          />
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function ReasonNote({
-  basis,
-  fallback = "这条旧记录没有保存推断依据。",
-  label = "推断依据",
-}: {
-  basis?: string;
-  fallback?: string;
-  label?: string;
-}) {
-  return (
-    <p className="font-sans-soft mt-4 rounded-2xl bg-[#ece6da] px-4 py-3 text-sm leading-6 text-muted">
-      {label}：{basis?.trim() || fallback}
-    </p>
-  );
-}
-
-function ConversationReviewCard({ record }: { record: ReflectionRecord }) {
-  const paperClassName =
-    "relative w-full bg-[#e8e2d5] bg-[radial-gradient(ellipse_at_18%_24%,rgba(126,145,113,0.17),transparent_22%),radial-gradient(ellipse_at_82%_72%,rgba(151,125,91,0.13),transparent_24%),linear-gradient(118deg,transparent_0%,rgba(255,255,255,0.22)_18%,transparent_34%,rgba(100,89,72,0.08)_48%,transparent_63%,rgba(255,255,255,0.24)_79%,transparent_100%),linear-gradient(25deg,#e5ded0,#f0ebdf_48%,#ddd4c4)] px-10 py-9 shadow-[0_24px_50px_rgba(65,55,41,0.18)]";
-  const paperDecorations = (
     <>
-      <span
-        className="pointer-events-none absolute -left-4 -top-3 h-8 w-24 -rotate-[34deg] bg-[#ddd096]/90 shadow-sm"
-        data-decoration="paper-tape"
-      />
-      <span
-        className="pointer-events-none absolute -bottom-3 -right-4 h-8 w-24 -rotate-[31deg] bg-[#c99858]/85 shadow-sm"
-        data-decoration="paper-tape"
-      />
-      <span className="pointer-events-none absolute bottom-8 left-5 h-40 w-20 -rotate-12 rounded-[60%_20%_55%_30%] bg-sage/10 blur-[1px]" />
-      <span className="pointer-events-none absolute right-7 top-24 h-44 w-24 rotate-12 rounded-[30%_70%_25%_60%] bg-clay/8 blur-[2px]" />
-      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(91deg,transparent_0%,rgba(255,255,255,0.14)_22%,rgba(94,80,63,0.05)_22.5%,transparent_44%,rgba(255,255,255,0.16)_68%,rgba(94,80,63,0.05)_69%,transparent_100%)]" />
-      <span
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(132deg,transparent_0%,transparent_18%,rgba(255,255,255,0.28)_18.5%,rgba(91,74,55,0.10)_19.2%,transparent_20%,transparent_47%,rgba(255,255,255,0.24)_47.7%,rgba(91,74,55,0.09)_48.5%,transparent_49.4%,transparent_100%),linear-gradient(42deg,transparent_0%,transparent_31%,rgba(91,74,55,0.08)_31.6%,rgba(255,255,255,0.22)_32.3%,transparent_33%,transparent_69%,rgba(91,74,55,0.08)_69.6%,rgba(255,255,255,0.24)_70.3%,transparent_71%,transparent_100%),linear-gradient(96deg,transparent_0%,transparent_54%,rgba(255,255,255,0.22)_54.6%,rgba(91,74,55,0.08)_55.3%,transparent_56%,transparent_100%)] mix-blend-multiply"
-        data-decoration="paper-creases"
-      />
+      <CameraRig reducedMotion={reducedMotion} scrollProgress={scrollProgress} timelineIndex={timelineIndex} />
+      <MemoryStream points={points.map((point) => point.position)} />
+      <group>
+        {points.map((memory) => (
+          <MemoryChip
+            activeIndex={activeIndex}
+            timelineIndex={timelineIndex}
+            coverImage={resolveCover(memory)}
+            key={memory.instanceId}
+            memory={memory}
+            onCardSelect={onCardSelect}
+            onCoverUpload={onCoverUpload}
+          />
+        ))}
+      </group>
     </>
   );
-
-  if (!record.conversation_messages?.length) {
-    return (
-      <article className={paperClassName} data-surface="pressed-botanical-letter" data-testid="gallery-left-conversation">
-        {paperDecorations}
-        <p className="font-sans-soft relative py-12 text-center text-sm leading-8 text-muted">这条记忆没有保存对话内容。</p>
-      </article>
-    );
-  }
-
-  return (
-    <article className={paperClassName} data-surface="pressed-botanical-letter" data-testid="gallery-left-conversation">
-      {paperDecorations}
-      <div className="relative mx-auto max-h-72 max-w-[520px] overflow-y-auto px-3 pr-5 text-center">
-        {record.conversation_messages.map((message, index) => (
-          <div className="py-4" key={`${message.role}-${index}`}>
-            <span className="font-sans-soft text-[11px] font-semibold tracking-[0.18em] text-clay">
-              {message.role === "user" ? "我写下" : "AI 回信"}
-            </span>
-            <p className={cn("mt-2 text-sm leading-8", message.role === "user" ? "text-ink" : "text-muted")}>{message.content}</p>
-          </div>
-        ))}
-      </div>
-    </article>
-  );
 }
 
-function InfoCard({ basis, children, title }: { basis?: string; children: React.ReactNode; title: string }) {
-  return (
-    <article className="rounded-[28px] border border-[#d8c9b3] bg-[#faf7ef] p-6 text-muted shadow-[0_14px_38px_rgba(84,65,44,0.07)]">
-      <h3 className="font-sans-soft text-2xl font-semibold tracking-[0.06em] text-sage">{title}</h3>
-      <div className="mt-4 text-lg leading-8">{children}</div>
-      {basis !== undefined ? <ReasonNote basis={basis} /> : null}
-    </article>
-  );
-}
-
-function Prescription({
-  icon,
-  items,
-  reasons,
-  title,
+function CameraRig({
+  reducedMotion,
+  scrollProgress,
+  timelineIndex,
 }: {
-  icon: React.ReactNode;
-  items: string[];
-  reasons: string[];
-  title: string;
+  reducedMotion: boolean;
+  scrollProgress: number;
+  timelineIndex: number;
 }) {
+  const { camera } = useThree();
+  const target = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((_, delta) => {
+    const activeZ = -timelineIndex * depthGap;
+    const angle = timelineIndex * 0.75;
+    const activeX = Math.cos(angle) * radius;
+    const activeY = Math.sin(angle) * 1.2;
+    const drift = reducedMotion ? 0 : Math.sin(scrollProgress * Math.PI * 2) * 0.18;
+    const desired = new THREE.Vector3(activeX * 0.72 + drift, activeY * 0.58, activeZ + 6.15);
+    camera.position.lerp(desired, 1 - Math.exp(-delta * 3.8));
+    target.set(activeX * 0.46, activeY * 0.38, activeZ - 6.4);
+    camera.lookAt(target);
+  });
+
+  return null;
+}
+
+function MemoryStream({ points }: { points: THREE.Vector3[] }) {
+  const curve = useMemo(() => new THREE.CatmullRomCurve3(points), [points]);
+
   return (
-    <article className="rounded-[28px] border border-[#d8c9b3] bg-[#faf7ef] p-6 text-muted shadow-[0_14px_38px_rgba(84,65,44,0.07)]">
-      <h3 className="flex items-center gap-2 font-sans-soft text-2xl font-semibold tracking-[0.02em] text-ink">
-        {icon}
-        {title}
-      </h3>
-      <ul className="mt-4 space-y-3 text-lg leading-8">
-        {items.slice(0, 3).map((item, index) => (
-          <li key={item}>
-            {item}
-            <ReasonNote basis={reasons[index]} fallback="这条旧记录没有保存推荐理由。" label="推荐理由" />
-          </li>
-        ))}
-      </ul>
-    </article>
+    <group>
+      <mesh>
+        <tubeGeometry args={[curve, 280, 0.026, 10, false]} />
+        <meshBasicMaterial color="#c7e9ff" opacity={0.34} transparent />
+      </mesh>
+      <mesh>
+        <tubeGeometry args={[curve, 280, 0.078, 10, false]} />
+        <meshBasicMaterial color="#5e7dff" opacity={0.08} transparent />
+      </mesh>
+    </group>
   );
 }
 
+function MemoryChip({
+  activeIndex,
+  timelineIndex,
+  coverImage,
+  memory,
+  onCardSelect,
+  onCoverUpload,
+}: {
+  activeIndex: number;
+  timelineIndex: number;
+  coverImage: string;
+  memory: MemoryPoint;
+  onCardSelect: (record: ReflectionRecord, coverImage: string) => void;
+  onCoverUpload: (recordId: string, file?: File) => void;
+}) {
+  const distance = Math.abs(memory.index - timelineIndex);
+  const isActive = memory.index === activeIndex;
+  const isNearLens = distance < 0.78;
+  const opacity = isNearLens ? 1 : Math.max(0.1, 0.9 - distance * 0.17);
+  const scale = isNearLens ? 1.04 : Math.max(0.46, 0.88 - distance * 0.05);
+  const blur = isNearLens ? 0 : Math.min(6, Math.max(0, distance - 0.68) * 0.9);
+
+  return (
+    <Float enabled={!isActive} floatIntensity={0.18} rotationIntensity={0.08} speed={1.6}>
+      <group position={memory.position}>
+        <Html
+          center
+          className="pointer-events-auto"
+          distanceFactor={5.7}
+          occlude={false}
+          style={{
+            filter: `blur(${blur}px)`,
+            opacity,
+            transform: `scale(${scale})`,
+            transition: "filter 260ms ease, opacity 260ms ease, transform 260ms ease",
+          }}
+          transform
+        >
+          <button
+            aria-label={memory.record.title}
+            className={cn(
+              "group relative h-[72px] w-[116px] overflow-hidden rounded-[14px] border border-white/[0.12] bg-[rgba(15,23,42,0.48)] text-left shadow-[0_0_22px_rgba(120,160,255,0.14)] outline-none backdrop-blur-[18px] transition duration-300 hover:-translate-y-1 hover:border-white/30 hover:shadow-[0_0_34px_rgba(148,190,255,0.24)] focus-visible:ring-2 focus-visible:ring-sky-200/70",
+              isNearLens && "border-sky-100/45 shadow-[0_0_58px_rgba(147,197,253,0.34)]",
+            )}
+            onClick={() => onCardSelect(memory.record, coverImage)}
+            type="button"
+          >
+            <span
+              className={cn(
+                "absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-105 group-hover:opacity-90",
+                isNearLens ? "opacity-95" : "opacity-64",
+              )}
+              style={{ backgroundImage: `url(${coverImage})` }}
+            />
+            <span
+              className={cn(
+                "absolute inset-0 transition duration-300",
+                isNearLens
+                  ? "bg-[linear-gradient(180deg,rgba(2,6,14,0.02),rgba(2,6,14,0.08)_42%,rgba(2,6,14,0.58))]"
+                  : "bg-[linear-gradient(180deg,rgba(2,6,14,0.12),rgba(2,6,14,0.24)_42%,rgba(2,6,14,0.86))]",
+              )}
+            />
+            <span className="absolute left-2.5 top-2 font-sans-soft text-[8px] uppercase tracking-[0.18em] text-sky-100/90">
+              {String(memory.index + 1).padStart(2, "0")}
+            </span>
+            <span className="absolute bottom-2 left-2.5 right-2.5">
+              <span className="font-sans-soft block text-[7px] tracking-[0.12em] text-slate-300/80">{formatDate(memory.record.created_at)}</span>
+              <span className="mt-0.5 block line-clamp-2 font-serif text-[9px] leading-tight text-white">{memory.record.title}</span>
+            </span>
+            {isNearLens ? (
+              <label
+                className="absolute right-2 top-2 grid size-8 cursor-pointer place-items-center rounded-full border border-white/15 bg-slate-950/45 text-slate-100 opacity-0 backdrop-blur transition group-hover:opacity-100"
+                onClick={(event) => event.stopPropagation()}
+                title="更换此记忆图片"
+              >
+                <ImagePlus className="size-4" />
+                <input
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => onCoverUpload(memory.sourceId, event.target.files?.[0])}
+                  type="file"
+                />
+              </label>
+            ) : null}
+          </button>
+        </Html>
+      </group>
+    </Float>
+  );
+}
+
+function ParticleField() {
+  const geometry = useMemo(() => {
+    const positions = new Float32Array(420 * 3);
+    for (let index = 0; index < 420; index += 1) {
+      positions[index * 3] = (Math.random() - 0.5) * 18;
+      positions[index * 3 + 1] = (Math.random() - 0.5) * 10;
+      positions[index * 3 + 2] = -Math.random() * 56 + 4;
+    }
+    const buffer = new THREE.BufferGeometry();
+    buffer.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    return buffer;
+  }, []);
+
+  return (
+    <points geometry={geometry}>
+      <pointsMaterial color="#dbeafe" opacity={0.28} size={0.024} sizeAttenuation transparent />
+    </points>
+  );
+}
+
+function MemorySummaryDialog({ memory, onClose }: { memory: SelectedMemory; onClose: () => void }) {
+  const { coverImage, record } = memory;
+  const firstPersonSummary = toFirstPerson(record.summary);
+
+  return (
+    <motion.div
+      aria-modal="true"
+      className="fixed inset-0 z-40 grid place-items-center bg-[#02050a]/42 px-4 backdrop-blur-[5px]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      role="dialog"
+      onClick={onClose}
+    >
+      <motion.article
+        className="relative grid h-[min(48vh,500px)] min-h-[360px] w-[min(78vw,1180px)] grid-cols-[0.9fr_1.35fr] overflow-hidden rounded-[26px] border border-white/[0.14] bg-[rgba(10,17,32,0.88)] text-slate-100 shadow-[0_0_100px_rgba(95,140,220,0.24)] backdrop-blur-2xl max-lg:h-[76vh] max-lg:w-[92vw] max-lg:grid-cols-1"
+        initial={{ opacity: 0, scale: 0.94, y: 14, filter: "blur(10px)" }}
+        animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(147,197,253,0.16),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.05),transparent)]" />
+        <button
+          aria-label="关闭记忆总结"
+          className="absolute right-4 top-4 z-10 grid size-10 place-items-center rounded-full border border-white/10 bg-black/20 text-2xl text-slate-300 transition hover:bg-white/[0.14] hover:text-white"
+          onClick={onClose}
+          type="button"
+        >
+          ×
+        </button>
+        <div className="relative min-h-0 overflow-hidden max-lg:min-h-[240px]">
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${coverImage})`, backgroundPosition: "center center" }} />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(10,17,32,0.18)_78%,rgba(10,17,32,0.86)_100%)]" />
+        </div>
+        <div className="relative flex min-w-0 flex-col overflow-y-auto p-7 pr-10">
+          <div className="[&>span]:hidden">
+            <div>
+              <span className="font-sans-soft inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-[#9fb8ff]">
+                <Sparkles className="size-3.5" />
+                {formatDate(record.created_at)}
+              </span>
+              <h2 className="mt-2 line-clamp-2 font-serif text-3xl font-semibold leading-tight text-white">{record.title}</h2>
+            </div>
+            <span className="text-xl tracking-[0.16em] text-amber-300">★★★</span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {record.emotion_tags.slice(0, 4).map((tag) => (
+              <span className="rounded-full border border-white/10 bg-white/[0.08] px-3 py-1 text-xs text-slate-300" key={tag}>
+                {tag}
+              </span>
+            ))}
+            <span className="rounded-full border border-rose-200/10 bg-rose-300/10 px-3 py-1 text-xs text-rose-200">
+              Mood: {record.emotion_intensity * 10}%
+            </span>
+          </div>
+          <p className="mt-5 text-base leading-8 text-slate-300">{firstPersonSummary}</p>
+          <div className="mt-5 rounded-2xl bg-[#070d19]/78 p-4">
+            <p className="font-sans-soft text-[11px] uppercase tracking-[0.2em] text-slate-500">原始输入</p>
+            <p className="mt-2 line-clamp-3 text-sm leading-7 text-slate-300">“{record.event_text}”</p>
+          </div>
+        </div>
+      </motion.article>
+    </motion.div>
+  );
+}
+
+function OpeningFlash({ disabled }: { disabled: boolean }) {
+  const [visible, setVisible] = useState(!disabled);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (disabled) {
+      setVisible(false);
+      return;
+    }
+
+    const imageTimer = window.setInterval(() => setIndex((current) => (current + 1) % memoryPhotos.length), 130);
+    const exitTimer = window.setTimeout(() => setVisible(false), 1500);
+    return () => {
+      window.clearInterval(imageTimer);
+      window.clearTimeout(exitTimer);
+    };
+  }, [disabled]);
+
+  if (!visible) return null;
+
+  return (
+    <motion.div
+      animate={{ opacity: [1, 1, 0], filter: ["blur(0px)", "blur(0px)", "blur(18px)"], scale: [1, 1.02, 1.08] }}
+      className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-hidden bg-[#030508]"
+      initial={{ opacity: 1 }}
+      transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1], times: [0, 0.72, 1] }}
+    >
+      <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${memoryPhotos[index]})` }} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(191,219,254,0.18),transparent_36%),linear-gradient(180deg,rgba(3,5,8,0.2),#030508)]" />
+      <div className="relative font-serif text-3xl tracking-[-0.03em] text-slate-100">Record what matters.</div>
+    </motion.div>
+  );
+}
+
+function buildMemoryItems(records: ReflectionRecord[]) {
+  const minimumCount = Math.max(24, records.length);
+  return Array.from({ length: minimumCount }, (_, index) => {
+    const record = records[index % records.length];
+    return {
+      instanceId: `${record.id}-${index}`,
+      sourceId: record.id,
+      record,
+      index,
+    };
+  });
+}
+
+function getDwelledTimelineIndex(progress: number, total: number) {
+  if (total <= 1) return 0;
+  const raw = progress * (total - 1);
+  const base = Math.min(total - 1, Math.floor(raw));
+  const phase = raw - base;
+  if (base >= total - 1) return total - 1;
+
+  // Keep each memory clear in the active zone before easing toward the next one.
+  if (phase < 0.58) return base;
+  return base + easeInOutCubic((phase - 0.58) / 0.42);
+}
+
+function easeInOutCubic(value: number) {
+  const t = Math.min(1, Math.max(0, value));
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return reduced;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function toFirstPerson(text: string) {
+  return text
+    .replaceAll("用户", "我")
+    .replaceAll("她", "我")
+    .replaceAll("他", "我")
+    .replaceAll("自己", "我")
+    .replaceAll("对方", "那个人");
+}

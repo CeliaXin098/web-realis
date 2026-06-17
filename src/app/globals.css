@@ -39,6 +39,53 @@ body {
   text-rendering: geometricPrecision;
 }
 
+body.gallery-dark {
+  --app-content-scale: 1;
+  background: #05080d;
+  overflow-x: hidden;
+}
+
+body.gallery-dark .grain {
+  opacity: 0.08;
+}
+
+body.gallery-dark header {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(3, 7, 12, 0.92);
+  color: #e5edf6;
+}
+
+body.gallery-dark header a,
+body.gallery-dark header span {
+  color: inherit;
+}
+
+body.gallery-dark header nav > a > span:first-child {
+  background: rgba(226, 239, 255, 0.1);
+  color: #f4f8ff;
+  box-shadow: 0 0 34px rgba(120, 160, 255, 0.12);
+}
+
+body.gallery-dark header nav > div:nth-child(2) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(5, 9, 16, 0.56);
+}
+
+body.gallery-dark header nav > div:nth-child(2) a {
+  color: rgba(226, 235, 246, 0.72);
+}
+
+body.gallery-dark header nav > div:nth-child(2) a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+body.gallery-dark header nav > div:last-child a {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9f1fb;
+}
+
 button,
 input,
 textarea,
